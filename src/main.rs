@@ -37,7 +37,7 @@ impl Grid {
 }
 
 const GRID_RESOLUTION: usize = 128;
-const GRAVITY: Vec2 = Vec2::new(0.0, -10.0);
+const GRAVITY: Vec2 = Vec2::new(0.0, -0.5);
 
 fn init_grid(mut grid: ResMut<Grid>) {
     grid.cells.clear();
@@ -80,7 +80,7 @@ fn init_particles(
                         x: 64.0 + x as f32 / 4.0,
                         y: 64.0 + y as f32 / 4.0,
                     },
-                    velocity: Vec2::new(10.0, 10.0),
+                    velocity: Vec2::new(1.0, 1.0),
                     mass: 1.0,
                 },
                 Mesh2d(handle),
@@ -100,7 +100,7 @@ fn zero_grid(mut grid: ResMut<Grid>) {
 fn particle_to_grid(query: Query<&Particle>, mut grid: ResMut<Grid>) {
     for particle in query {
         let cell_index = particle.position.as_uvec2();
-        let cell_difference = (particle.position - cell_index.as_vec2()) - Vec2::splat(0.5);
+        let cell_difference = (particle.position - cell_index.as_vec2()) - 0.5;
 
         let weights: [Vec2; 3] = [
             0.5 * (0.5 - cell_difference).powf(2.0),
@@ -115,8 +115,8 @@ fn particle_to_grid(query: Query<&Particle>, mut grid: ResMut<Grid>) {
                 let cell_position =
                     UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
                 let cell_distance =
-                    (cell_position.as_vec2() - particle.position) + Vec2::splat(0.5);
-                let q = cell_distance; // TODO: Should use the affine momentum matrix in Particle
+                    (cell_position.as_vec2() - particle.position) + 0.5;
+                let q = Mat2::ZERO * cell_distance; // TODO: Should use the affine momentum matrix in Particle
 
                 let mass_contribution = weight * particle.mass;
 
@@ -154,11 +154,12 @@ fn calculate_grid_velocities(time: Res<Time>, mut grid: ResMut<Grid>) {
 }
 
 fn grid_to_particle(time: Res<Time>, query: Query<&mut Particle>, grid: Res<Grid>) {
+    println!("grid_to_particle we");
     for mut particle in query {
         particle.velocity = Vec2::ZERO;
 
         let cell_index = particle.position.as_uvec2();
-        let cell_difference = (particle.position - cell_index.as_vec2()) - Vec2::splat(0.5);
+        let cell_difference = (particle.position - cell_index.as_vec2()) - 0.5;
 
         let weights: [Vec2; 3] = [
             0.5 * (0.5 - cell_difference).powf(2.0),
@@ -176,7 +177,7 @@ fn grid_to_particle(time: Res<Time>, query: Query<&mut Particle>, grid: Res<Grid
                     cell_position.x as usize * GRID_RESOLUTION + cell_position.y as usize;
 
                 let cell_distance =
-                    (cell_position.as_vec2() - particle.position) + Vec2::splat(0.5);
+                    (cell_position.as_vec2() - particle.position) + 0.5;
                 let weighted_velocity = grid.cells.get(cell_index).unwrap().velocity * weight;
 
                 particle.velocity += weighted_velocity;
@@ -184,6 +185,7 @@ fn grid_to_particle(time: Res<Time>, query: Query<&mut Particle>, grid: Res<Grid
         }
 
         let particle_velocity = particle.velocity;
+        println!("particle_velocity hae: {}", particle_velocity);
 
         particle.position += particle_velocity * time.delta_secs();
 
@@ -195,7 +197,7 @@ fn grid_to_particle(time: Res<Time>, query: Query<&mut Particle>, grid: Res<Grid
 
 fn update_particle_transforms(query: Query<(&mut Transform, &Particle)>) {
     for (mut transform, particle) in query {
-        transform.translation = Vec3::new(particle.position.x, particle.position.y, 0.0);
+        transform.translation = Vec3::new(particle.position.x * 2.0, particle.position.y * 2.0, 0.0);
     }
 }
 
@@ -213,10 +215,10 @@ impl Plugin for MpmPlugin {
                 particle_to_grid,
                 calculate_grid_velocities,
                 grid_to_particle,
+                update_particle_transforms
             )
                 .chain(),
         );
-        app.add_systems(Update, update_particle_transforms);
     }
 }
 
