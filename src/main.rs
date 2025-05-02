@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use bevy::prelude::*;
+use rand::Rng;
 
 #[derive(Resource)]
 struct FrameTimer(Timer);
@@ -30,14 +31,8 @@ struct Grid {
     cells: Vec<Cell>,
 }
 
-impl Grid {
-    pub fn get(&self, x: usize, y: usize) -> Option<&Cell> {
-        self.cells.get(x + y * GRID_RESOLUTION)
-    }
-}
-
 const GRID_RESOLUTION: usize = 128;
-const GRAVITY: Vec2 = Vec2::new(0.0, -0.5);
+const GRAVITY: Vec2 = Vec2::new(0.0, -20.0);
 
 fn init_grid(mut grid: ResMut<Grid>) {
     grid.cells.clear();
@@ -69,7 +64,7 @@ fn init_particles(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    println!("init particles");
+    let mut rand = rand::rng();
     for x in 0..50 {
         for y in 0..50 {
             let handle = meshes.add(Circle::new(1.0));
@@ -80,7 +75,7 @@ fn init_particles(
                         x: 64.0 + x as f32 / 4.0,
                         y: 64.0 + y as f32 / 4.0,
                     },
-                    velocity: Vec2::new(1.0, 1.0),
+                    velocity: Vec2::new(rand.random_range(-1000.0..=1000.0), rand.random_range(-1000.0..=1000.0)),
                     mass: 1.0,
                 },
                 Mesh2d(handle),
@@ -104,7 +99,7 @@ fn particle_to_grid(query: Query<&Particle>, mut grid: ResMut<Grid>) {
 
         let weights: [Vec2; 3] = [
             0.5 * (0.5 - cell_difference).powf(2.0),
-            0.75 * cell_difference.powf(2.0),
+            0.75 - cell_difference.powf(2.0),
             0.5 * (0.5 + cell_difference).powf(2.0),
         ];
 
@@ -136,25 +131,34 @@ fn particle_to_grid(query: Query<&Particle>, mut grid: ResMut<Grid>) {
 fn calculate_grid_velocities(time: Res<Time>, mut grid: ResMut<Grid>) {
     for (index, cell) in grid.cells.iter_mut().enumerate() {
         if cell.mass > 0.0 {
+            let gravity_velocity = time.delta_secs() * GRAVITY;
             cell.velocity /= cell.mass;
-            cell.velocity += time.delta_secs() * GRAVITY;
+            cell.velocity += gravity_velocity;
 
             let x = index / GRID_RESOLUTION;
-            let y = index & GRID_RESOLUTION;
+            let y = index % GRID_RESOLUTION;
 
-            if x < 2 || x > GRID_RESOLUTION - 3 {
-                cell.velocity.x = 0.0;
+            if x < 2 {
+                cell.velocity.x = 100.1;
             }
 
-            if y < 2 || y > GRID_RESOLUTION - 3 {
+            if x > GRID_RESOLUTION - 3 {
+                cell.velocity.x = -100.1;
+            }
+
+            if y < 2 {
+                cell.velocity.x *= 0.9;
                 cell.velocity.y = 0.0;
+            }
+
+            if y > GRID_RESOLUTION - 3 {
+                cell.velocity.y = -100.1;
             }
         }
     }
 }
 
 fn grid_to_particle(time: Res<Time>, query: Query<&mut Particle>, grid: Res<Grid>) {
-    println!("grid_to_particle we");
     for mut particle in query {
         particle.velocity = Vec2::ZERO;
 
@@ -163,7 +167,7 @@ fn grid_to_particle(time: Res<Time>, query: Query<&mut Particle>, grid: Res<Grid
 
         let weights: [Vec2; 3] = [
             0.5 * (0.5 - cell_difference).powf(2.0),
-            0.75 * cell_difference.powf(2.0),
+            0.75 - cell_difference.powf(2.0),
             0.5 * (0.5 + cell_difference).powf(2.0),
         ];
 
@@ -185,7 +189,6 @@ fn grid_to_particle(time: Res<Time>, query: Query<&mut Particle>, grid: Res<Grid
         }
 
         let particle_velocity = particle.velocity;
-        println!("particle_velocity hae: {}", particle_velocity);
 
         particle.position += particle_velocity * time.delta_secs();
 
@@ -197,7 +200,7 @@ fn grid_to_particle(time: Res<Time>, query: Query<&mut Particle>, grid: Res<Grid
 
 fn update_particle_transforms(query: Query<(&mut Transform, &Particle)>) {
     for (mut transform, particle) in query {
-        transform.translation = Vec3::new(particle.position.x * 2.0, particle.position.y * 2.0, 0.0);
+        transform.translation = Vec3::new((particle.position.x - 64.0) * 4.0, (particle.position.y - 64.0) * 4.0, 0.0);
     }
 }
 
@@ -206,7 +209,7 @@ pub struct MpmPlugin;
 impl Plugin for MpmPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Grid { cells: Vec::new() });
-        app.insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(1.0 / 10.0)));
+        app.insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(1.0 / 60.0)));
         app.add_systems(Startup, (init_grid, init_particles).chain());
         app.add_systems(
             FixedUpdate,
