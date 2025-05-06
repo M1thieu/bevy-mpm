@@ -1,3 +1,4 @@
-pub const rho_water: f32 = 1.0;
-pub const k_water: f32 = 50.0;
-pub const gamma_water: f32 = 3.0;
+// Physical constants for water simulation yet considered to be transfered to another file
+pub const RHO_WATER: f32 = 1.0;
+pub const K_WATER: f32 = 50.0;
+pub const GAMMA_WATER: f32 = 3.0;
