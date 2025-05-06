@@ -3,7 +3,11 @@ use std::time::Duration;
 use bevy::prelude::*;
 use rand::Rng;
 use mpm2d::grid::{Cell, Grid, GRID_RESOLUTION};
-use mpm2d::simulation::Particle;
+use mpm2d::simulation::MaterialType;
+use mpm2d::constants::GRAVITY;
+use mpm2d::particle::Particle;
+use mpm2d::p2g::{particle_to_grid_mass_velocity, particle_to_grid_forces};
+use mpm2d::g2p::grid_to_particle;
 
 #[derive(Resource)]
 struct FrameTimer(Timer);
@@ -33,7 +37,7 @@ fn init_particles(
                     velocity: Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-10.0..=10.0)),
                     mass: 1.0,
                     affine_momentum_matrix: Mat2::ZERO,
-                    material_type: mpm2d::simulation::MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 },
+                    material_type: MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 },
                 },
                 Mesh2d(meshes.add(Circle::new(1.0))),
                 MeshMaterial2d(materials.add(Color::hsl(210.0, 0.7, 0.3))),
@@ -52,7 +56,7 @@ fn init_particles(
                     velocity: Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-10.0..=10.0)),
                     mass: 1.0,
                     affine_momentum_matrix: Mat2::ZERO,
-                    material_type: mpm2d::simulation::MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 },
+                    material_type: MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 },
                 },
                 Mesh2d(meshes.add(Circle::new(1.0))),
                 MeshMaterial2d(materials.add(Color::hsl(210.0, 0.7, 0.3))),
@@ -107,7 +111,7 @@ fn controls(
                 velocity: Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-50.0..=-20.0)),
                 mass: 1.0,
                 affine_momentum_matrix: Mat2::ZERO,
-                material_type: mpm2d::simulation::MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 },
+                material_type: MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 },
             },
             Mesh2d(handle),
             MeshMaterial2d(materials.add(Color::hsl(0.0, 1.0, 0.5))),
@@ -137,6 +141,13 @@ fn update_particle_transforms(
         });
 }
 
+fn calculate_grid_velocities_wrapper(
+    time: Res<Time>,
+    mut grid: ResMut<Grid>
+) {
+    mpm2d::grid::calculate_grid_velocities(time, grid, GRAVITY);
+}
+
 pub struct MpmPlugin;
 
 impl Plugin for MpmPlugin {
@@ -148,10 +159,10 @@ impl Plugin for MpmPlugin {
             FixedUpdate,
             (
                 mpm2d::grid::zero_grid,
-                mpm2d::simulation::particle_to_grid_1,
-                mpm2d::simulation::particle_to_grid_2,
-                mpm2d::simulation::calculate_grid_velocities_wrapper,
-                mpm2d::simulation::grid_to_particle,
+                particle_to_grid_mass_velocity,
+                particle_to_grid_forces,
+                calculate_grid_velocities_wrapper,
+                grid_to_particle,
                 update_particle_transforms,
                 controls,
             )
