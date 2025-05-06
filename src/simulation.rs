@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use rayon::iter::IntoParallelRefMutIterator;
 
 use crate::constants;
 
@@ -32,9 +31,25 @@ impl Cell {
     }
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct Grid {
     pub cells: Vec<Cell>,
+}
+
+impl Grid {
+    pub fn zero_all_cells(&mut self) {
+        self.cells.iter_mut().for_each(|cell| cell.zero());
+    }
+    
+    pub fn get_cell_mut(&mut self, pos: UVec2) -> Option<&mut Cell> {
+        let index = get_cell_index(pos);
+        self.cells.get_mut(index)
+    }
+    
+    pub fn get_cell(&self, pos: UVec2) -> Option<&Cell> {
+        let index = get_cell_index(pos);
+        self.cells.get(index)
+    }
 }
 
 #[derive(Component)]
@@ -81,29 +96,48 @@ impl MaterialType {
     }
 }
 
-// New helper function to calculate grid weights and positions
+#[inline]
+fn get_cell_index(pos: UVec2) -> usize {
+    pos.y as usize * GRID_RESOLUTION + pos.x as usize
+}
+
+// Helper function to calculate grid weights and positions
 fn calculate_grid_weights(particle_position: Vec2) -> (UVec2, [Vec2; 3]) {
     let cell_index = particle_position.as_uvec2();
     let cell_difference = (particle_position - cell_index.as_vec2()) - 0.5;
-
-    let weights = [
-        0.5 * (0.5 - cell_difference).powf(2.0),
-        0.75 - cell_difference.powf(2.0),
-        0.5 * (0.5 + cell_difference).powf(2.0),
+    
+    // Calculate weights for each dimension separately
+    let x_weights = [
+        0.5 * (0.5 - cell_difference.x) * (0.5 - cell_difference.x),
+        0.75 - cell_difference.x * cell_difference.x,
+        0.5 * (0.5 + cell_difference.x) * (0.5 + cell_difference.x)
     ];
-
+    
+    let y_weights = [
+        0.5 * (0.5 - cell_difference.y) * (0.5 - cell_difference.y),
+        0.75 - cell_difference.y * cell_difference.y,
+        0.5 * (0.5 + cell_difference.y) * (0.5 + cell_difference.y)
+    ];
+    
+    // Combine into Vec2 array
+    let weights = [
+        Vec2::new(x_weights[0], y_weights[0]),
+        Vec2::new(x_weights[1], y_weights[1]),
+        Vec2::new(x_weights[2], y_weights[2])
+    ];
+    
     (cell_index, weights)
 }
 
 pub fn zero_grid(mut grid: ResMut<Grid>) {
-    grid.cells.iter_mut().for_each(|cell| cell.zero());
+    grid.zero_all_cells();
 }
 
 pub fn particle_to_grid_1(
-    query: Query<&Particle>,
+    query: Query<(Entity, &Particle)>,
     mut grid: ResMut<Grid>
 ) {
-    for particle in query {
+    for (_, particle) in query.iter() {
         let (cell_index, weights) = calculate_grid_weights(particle.position);
 
         for gx in 0..3 {
@@ -118,9 +152,8 @@ pub fn particle_to_grid_1(
 
                 let mass_contribution = weight * particle.mass;
 
-                // Fixed indexing: y * width + x for row-major order
-                let cell_index =
-                    cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
+                // Use the helper function for cell indexing
+                let cell_index = get_cell_index(cell_position);
 
                 let cell = grid.cells.get_mut(cell_index).unwrap();
 
@@ -149,9 +182,8 @@ pub fn particle_to_grid_2(
                 let cell_position =
                     UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
 
-                // Fixed indexing: y * width + x for row-major order
-                let cell_index =
-                    cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
+                // Use the helper function for cell indexing
+                let cell_index = get_cell_index(cell_position);
 
                 let cell = grid.cells.get_mut(cell_index).unwrap();
 
@@ -186,9 +218,8 @@ pub fn particle_to_grid_2(
                     UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
                 let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
 
-                // Fixed indexing: y * width + x for row-major order
-                let cell_index =
-                    cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
+                // Use the helper function for cell indexing
+                let cell_index = get_cell_index(cell_position);
                 let cell = grid.cells.get_mut(cell_index).unwrap();
 
                 let momentum = eq_16_term_0 * weight * cell_distance;
@@ -245,9 +276,8 @@ pub fn grid_to_particle(
                     let cell_position =
                         UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
                     
-                    // Fixed indexing: y * width + x for row-major order
-                    let cell_index =
-                        cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
+                    // Use the helper function for cell indexing
+                    let cell_index = get_cell_index(cell_position);
 
                     let cell_distance =
                         (cell_position.as_vec2() - particle.position) + 0.5;
