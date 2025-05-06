@@ -8,6 +8,8 @@ use mpm2d::constants::GRAVITY;
 use mpm2d::particle::Particle;
 use mpm2d::p2g::{particle_to_grid_mass_velocity, particle_to_grid_forces};
 use mpm2d::g2p::grid_to_particle;
+use mpm2d::PbmpmConfig;
+use mpm2d::pbmpm::solve_constraints_pbmpm;
 
 #[derive(Resource)]
 struct FrameTimer(Timer);
@@ -37,6 +39,8 @@ fn init_particles(
                     velocity: Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-10.0..=10.0)),
                     mass: 1.0,
                     affine_momentum_matrix: Mat2::ZERO,
+                    deformation_displacement: Mat2::ZERO,
+                    liquid_density: 1.0,
                     material_type: MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 },
                 },
                 Mesh2d(meshes.add(Circle::new(1.0))),
@@ -56,6 +60,8 @@ fn init_particles(
                     velocity: Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-10.0..=10.0)),
                     mass: 1.0,
                     affine_momentum_matrix: Mat2::ZERO,
+                    deformation_displacement: Mat2::ZERO,
+                    liquid_density: 1.0,
                     material_type: MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 },
                 },
                 Mesh2d(meshes.add(Circle::new(1.0))),
@@ -111,6 +117,8 @@ fn controls(
                 velocity: Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-50.0..=-20.0)),
                 mass: 1.0,
                 affine_momentum_matrix: Mat2::ZERO,
+                deformation_displacement: Mat2::ZERO,
+                liquid_density: 1.0,
                 material_type: MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 },
             },
             Mesh2d(handle),
@@ -129,7 +137,6 @@ fn controls(
             projection2d.scale *= 0.25f32.powf(time.delta_secs());
         }
     }
-
 }
 
 fn update_particle_transforms(
@@ -141,9 +148,27 @@ fn update_particle_transforms(
         });
 }
 
+// Add the simple density tracking system
+fn simple_density_tracking(
+    mut query: Query<&mut Particle>,
+) {
+    query.par_iter_mut().for_each(|mut particle| {
+        // Changed from if let to match to avoid irrefutable pattern warning
+        match particle.material_type {
+            MaterialType::Water { .. } => {
+                // Just initialize liquid_density if it's zero
+                if particle.liquid_density == 0.0 {
+                    particle.liquid_density = 1.0;
+                }
+                // In the future, this is where constraint solving will happen
+            }
+        }
+    });
+}
+
 fn calculate_grid_velocities_wrapper(
     time: Res<Time>,
-    mut grid: ResMut<Grid>
+    grid: ResMut<Grid> // Removed mut as it's passed as mutable to the inner function
 ) {
     mpm2d::grid::calculate_grid_velocities(time, grid, GRAVITY);
 }
@@ -154,10 +179,13 @@ impl Plugin for MpmPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Grid { cells: Vec::new() });
         app.insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(1.0 / 60.0)));
+        app.insert_resource(PbmpmConfig::default());  // Add the PBMPM config
+        
         app.add_systems(Startup, (init_grid, init_particles).chain());
         app.add_systems(
             FixedUpdate,
             (
+                solve_constraints_pbmpm,  // Add the constraint solving system
                 mpm2d::grid::zero_grid,
                 particle_to_grid_mass_velocity,
                 particle_to_grid_forces,
