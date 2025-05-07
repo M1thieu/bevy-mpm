@@ -55,6 +55,7 @@ pub fn grid_to_particle(
             particle.deformation_displacement = constrained_matrix;
             particle.affine_momentum_matrix = constrained_matrix;
             particle.velocity = velocity_sum;
+            particle.prev_deformation_displacement = constrained_matrix;
             
             // Update position
             particle.position += velocity_sum * time.delta_secs();

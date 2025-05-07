@@ -18,7 +18,7 @@ pub struct PbmpmConfig {
 impl Default for PbmpmConfig {
     fn default() -> Self {
         Self {
-            iteration_count: 5,  // Start with a small number of iterations
+            iteration_count: 2,  // Start with a small number of iterations
             relaxation_factor: 0.5,  // Slightly reduced for more stability
         }
     }

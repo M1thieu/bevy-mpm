@@ -11,13 +11,14 @@ pub fn solve_constraints_pbmpm(
     // Run multiple iterations of constraint solving
     for _ in 0..config.iteration_count {
         query.par_iter_mut().for_each(|mut particle| {
-            // Create a copy of the deformation displacement to work with
-            let mut deformation = particle.deformation_displacement;
+            // Use previous solution as starting point instead of current deformation
+            // This is the key change for warm starting
+            let mut deformation = particle.prev_deformation_displacement;
             
             // Apply constraints with the configured relaxation factor
             solve_incompressibility_constraint(
-                &mut particle, 
-                &mut deformation, 
+                &mut particle,
+                &mut deformation,
                 config.relaxation_factor
             );
             
@@ -26,4 +27,9 @@ pub fn solve_constraints_pbmpm(
             particle.affine_momentum_matrix = deformation;
         });
     }
+    
+    // After all iterations are done, store current solution for next frame
+    query.par_iter_mut().for_each(|mut particle| {
+        particle.prev_deformation_displacement = particle.deformation_displacement;
+    });
 }
