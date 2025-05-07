@@ -145,10 +145,13 @@ fn controls(
 fn update_particle_transforms(
     mut query: Query<(&mut Transform, &Particle)>,
 ) {
-    query.par_iter_mut()
-        .for_each(|(mut transform, particle)| {
-            transform.translation = Vec3::new((particle.position.x - 64.0) * 4.0, (particle.position.y - 64.0) * 4.0, 0.0);
-        });
+    query.par_iter_mut().for_each(|(mut transform, particle)| {
+        transform.translation = Vec3::new(
+            (particle.position.x - 64.0) * 4.0, 
+            (particle.position.y - 64.0) * 4.0, 
+            0.0
+        );
+    });
 }
 
 // Add the simple density tracking system
