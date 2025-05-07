@@ -1,6 +1,7 @@
+// src/solver/g2p.rs
 use bevy::prelude::*;
 use crate::grid::{Grid, GRID_RESOLUTION, calculate_grid_weights};
-use crate::particle::Particle;
+use crate::solver::Particle;
 use crate::simulation::MaterialType;
 use crate::constraints::solve_incompressibility_constraint;
 

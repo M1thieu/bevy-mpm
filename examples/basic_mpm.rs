@@ -5,9 +5,7 @@ use rand::Rng;
 use mpm2d::grid::{Cell, Grid, GRID_RESOLUTION};
 use mpm2d::simulation::MaterialType;
 use mpm2d::constants::GRAVITY;
-use mpm2d::particle::Particle;
-use mpm2d::p2g::{particle_to_grid_mass_velocity, particle_to_grid_forces};
-use mpm2d::g2p::grid_to_particle;
+use mpm2d::solver::prelude::*;
 use mpm2d::PbmpmConfig;
 use mpm2d::pbmpm::solve_constraints_pbmpm;
 

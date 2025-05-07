@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::constants;
 use crate::grid::{Cell, Grid, GRID_RESOLUTION, calculate_grid_weights};
 use crate::simulation::MaterialType;
-use crate::particle::Particle;
+use crate::solver::Particle;
 
 // Constants 
 const EOS_STIFFNESS: f32 = 10.0;

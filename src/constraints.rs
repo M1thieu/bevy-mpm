@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::particle::Particle;
+use crate::solver::Particle;
 use crate::simulation::MaterialType;
 
 /// Solves the incompressibility constraint for liquid particles

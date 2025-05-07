@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::particle::Particle;
+use crate::solver::Particle;
 use crate::constraints::solve_incompressibility_constraint;
 use crate::PbmpmConfig;
 
