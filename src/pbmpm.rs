@@ -1,33 +1,37 @@
 use bevy::prelude::*;
 use crate::solver::Particle;
-use crate::constraints::*;
+use crate::constraints::{ConstraintSolver, IncompressibilityConstraint};
 use crate::PbmpmConfig;
 
-/// Run multiple iterations of PBMPM constraint solving with weighted warm starting
+/// Run multiple iterations of PBMPM constraint solving
 pub fn solve_constraints_pbmpm(
     mut query: Query<&mut Particle>,
     config: Res<PbmpmConfig>,
 ) {
-    // Run multiple iterations of constraint solving
-    for iteration in 0..config.iteration_count {
-        // Calculate adaptive warm start weight based on iteration progress
-        let warm_start_weight = if iteration == 0 {
-            // Use full configured weight for first iteration
-            config.warm_start_weight 
-        } else {
-            // For subsequent iterations, no warm starting from previous frame
-            // as we're now working within the current frame's solving process
-            0.0
-        };
+    // Create our constraint solvers
+    let incompressibility_solver = IncompressibilityConstraint;
+    
+    // First iteration: blend the current deformation with previous solution
+    query.par_iter_mut().for_each(|mut particle| {
+        // Initial blend between current deformation and previous frame's solution
+        let blend_factor = config.warm_start_blend_factor;
+        let blended_deformation = 
+            particle.deformation_displacement * blend_factor + 
+            particle.prev_deformation_displacement * (1.0 - blend_factor);
         
+        // Use this blended solution as our starting point
+        particle.deformation_displacement = blended_deformation;
+        particle.affine_momentum_matrix = blended_deformation;
+    });
+
+    // Run constraint solving iterations
+    for _ in 0..config.iteration_count {
         query.par_iter_mut().for_each(|mut particle| {
-            // Calculate weighted blend of previous solution and current deformation
-            let mut deformation = 
-                particle.deformation_displacement * (1.0 - warm_start_weight) +
-                particle.prev_deformation_displacement * warm_start_weight;
+            // Make a copy of the current deformation
+            let mut deformation = particle.deformation_displacement;
             
-            // Apply constraints with the configured relaxation factor
-            solve_incompressibility_constraint(
+            // Apply constraints using our analytical solver
+            let _residual = incompressibility_solver.solve(
                 &mut particle,
                 &mut deformation,
                 config.relaxation_factor
