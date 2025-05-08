@@ -2,23 +2,9 @@ use std::time::Duration;
 
 use bevy::prelude::*;
 use rand::Rng;
-use mpm2d::grid::{Cell, Grid, GRID_RESOLUTION};
 use mpm2d::simulation::MaterialType;
-use mpm2d::constants::GRAVITY;
 use mpm2d::solver::prelude::*;
-use mpm2d::PbmpmConfig;
-use mpm2d::pbmpm::solve_constraints_pbmpm;
-
-#[derive(Resource)]
-struct FrameTimer(Timer);
-
-fn init_grid(mut grid: ResMut<Grid>) {
-    grid.cells.clear();
-    grid.cells.reserve_exact(GRID_RESOLUTION * GRID_RESOLUTION);
-    for _ in 0..(GRID_RESOLUTION * GRID_RESOLUTION) {
-        grid.cells.push(Cell::zeroed());
-    }
-}
+use mpm2d::PbmpmPlugin;
 
 fn init_particles(
     mut commands: Commands,
@@ -152,57 +138,6 @@ fn update_particle_transforms(
     });
 }
 
-// Add the simple density tracking system
-fn simple_density_tracking(
-    mut query: Query<&mut Particle>,
-) {
-    query.par_iter_mut().for_each(|mut particle| {
-        // Changed from if let to match to avoid irrefutable pattern warning
-        match particle.material_type {
-            MaterialType::Water { .. } => {
-                // Just initialize liquid_density if it's zero
-                if particle.liquid_density == 0.0 {
-                    particle.liquid_density = 1.0;
-                }
-                // In the future, this is where constraint solving will happen
-            }
-        }
-    });
-}
-
-fn calculate_grid_velocities_wrapper(
-    time: Res<Time>,
-    grid: ResMut<Grid> // Removed mut as it's passed as mutable to the inner function
-) {
-    mpm2d::grid::calculate_grid_velocities(time, grid, GRAVITY);
-}
-
-pub struct MpmPlugin;
-
-impl Plugin for MpmPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(Grid { cells: Vec::new() });
-        app.insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(1.0 / 60.0)));
-        app.insert_resource(PbmpmConfig::default());  // Add the PBMPM config
-        
-        app.add_systems(Startup, (init_grid, init_particles).chain());
-        app.add_systems(
-            FixedUpdate,
-            (
-                mpm2d::grid::zero_grid,
-                particle_to_grid_mass_velocity,
-                particle_to_grid_forces,
-                calculate_grid_velocities_wrapper,
-                grid_to_particle,
-                solve_constraints_pbmpm,  // Moved after grid_to_particle
-                update_particle_transforms,
-                controls,
-            )
-                .chain(),
-        );
-    }
-}
-
 fn init(mut commands: Commands) {
     commands.spawn(Camera2d);
 }
@@ -210,7 +145,9 @@ fn init(mut commands: Commands) {
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(MpmPlugin)
-        .add_systems(Startup, init)
+        .add_plugins(PbmpmPlugin::default()) // Use the plugin from our library
+        .insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(1.0 / 60.0)))
+        .add_systems(Startup, (init, init_particles))
+        .add_systems(FixedUpdate, (update_particle_transforms, controls).chain())
         .run();
 }
