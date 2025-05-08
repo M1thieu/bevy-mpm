@@ -8,12 +8,25 @@ pub fn solve_constraints_pbmpm(
     mut query: Query<&mut Particle>,
     config: Res<PbmpmConfig>,
 ) {
-    // Run multiple iterations of constraint solving
+    // First iteration: blend the current deformation with previous solution
+    query.par_iter_mut().for_each(|mut particle| {
+        // Initial blend between current deformation and previous frame's solution
+        // Start with weight of 0.3 for current and 0.7 for previous solution
+        let blend_factor = 0.3;
+        let blended_deformation = 
+            particle.deformation_displacement * blend_factor + 
+            particle.prev_deformation_displacement * (1.0 - blend_factor);
+        
+        // Use this blended solution as our starting point
+        particle.deformation_displacement = blended_deformation;
+        particle.affine_momentum_matrix = blended_deformation;
+    });
+
+    // Run constraint solving iterations
     for _ in 0..config.iteration_count {
         query.par_iter_mut().for_each(|mut particle| {
-            // Use previous solution as starting point instead of current deformation
-            // This is the key change for warm starting
-            let mut deformation = particle.prev_deformation_displacement;
+            // Make a copy of the current deformation
+            let mut deformation = particle.deformation_displacement;
             
             // Apply constraints with the configured relaxation factor
             solve_incompressibility_constraint(

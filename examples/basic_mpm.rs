@@ -189,12 +189,12 @@ impl Plugin for MpmPlugin {
         app.add_systems(
             FixedUpdate,
             (
-                solve_constraints_pbmpm,  // Add the constraint solving system
                 mpm2d::grid::zero_grid,
                 particle_to_grid_mass_velocity,
                 particle_to_grid_forces,
                 calculate_grid_velocities_wrapper,
                 grid_to_particle,
+                solve_constraints_pbmpm,  // Moved after grid_to_particle
                 update_particle_transforms,
                 controls,
             )

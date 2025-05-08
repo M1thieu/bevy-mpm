@@ -1,4 +1,3 @@
-// src/solver/g2p.rs
 use bevy::prelude::*;
 use crate::grid::{Grid, GRID_RESOLUTION, calculate_grid_weights};
 use crate::solver::Particle;
@@ -48,15 +47,10 @@ pub fn grid_to_particle(
         // Scale the deformation matrix
         deformation_matrix *= 4.0;
         
-        // Apply PBMPM constraint (moved to the constraints module)
-        let mut constrained_matrix = deformation_matrix;
-        solve_incompressibility_constraint(&mut particle, &mut constrained_matrix, 0.5);
-        
-        // Update particle
-        particle.deformation_displacement = constrained_matrix;
-        particle.affine_momentum_matrix = constrained_matrix;
+        // Update particle - constraints will be handled by solve_constraints_pbmpm
+        particle.deformation_displacement = deformation_matrix;
+        particle.affine_momentum_matrix = deformation_matrix;
         particle.velocity = velocity_sum;
-        particle.prev_deformation_displacement = constrained_matrix;
         
         // Update position
         particle.position += velocity_sum * time.delta_secs();
