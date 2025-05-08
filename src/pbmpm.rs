@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use crate::solver::Particle;
-use crate::constraints::solve_incompressibility_constraint;
+use crate::constraints::{ConstraintSolver, IncompressibilityConstraint};
 use crate::PbmpmConfig;
 
 /// Run multiple iterations of PBMPM constraint solving
@@ -8,11 +8,13 @@ pub fn solve_constraints_pbmpm(
     mut query: Query<&mut Particle>,
     config: Res<PbmpmConfig>,
 ) {
+    // Create our constraint solvers
+    let incompressibility_solver = IncompressibilityConstraint;
+    
     // First iteration: blend the current deformation with previous solution
     query.par_iter_mut().for_each(|mut particle| {
         // Initial blend between current deformation and previous frame's solution
-        // Start with weight of 0.3 for current and 0.7 for previous solution
-        let blend_factor = 0.3;
+        let blend_factor = config.warm_start_blend_factor;
         let blended_deformation = 
             particle.deformation_displacement * blend_factor + 
             particle.prev_deformation_displacement * (1.0 - blend_factor);
@@ -28,8 +30,8 @@ pub fn solve_constraints_pbmpm(
             // Make a copy of the current deformation
             let mut deformation = particle.deformation_displacement;
             
-            // Apply constraints with the configured relaxation factor
-            solve_incompressibility_constraint(
+            // Apply constraints using our analytical solver
+            let _residual = incompressibility_solver.solve(
                 &mut particle,
                 &mut deformation,
                 config.relaxation_factor
