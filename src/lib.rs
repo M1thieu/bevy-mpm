@@ -19,7 +19,8 @@ impl Default for PbmpmConfig {
         Self {
             iteration_count: 2,  // Start with a small number of iterations
             relaxation_factor: 0.5,  // Slightly reduced for more stability
-            warm_start_weight: 0.8, // Default to 80% weight from previous solution
+            warm_start_weight: 0.15, // Default to 15% weight from previous solution, might remains like so for a while
+                                     // NOTE: This allows a natural view of particles individually above 0.5 makes all too cohesive
         }
     }
 }
