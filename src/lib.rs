@@ -4,6 +4,7 @@ pub mod grid;
 pub mod simulation;
 pub mod solver;
 pub mod pbmpm;
+pub mod bukkit; 
 
 use bevy::prelude::*;
 use grid::{Grid, calculate_grid_velocities, zero_grid};
@@ -64,12 +65,15 @@ fn calculate_grid_velocities_wrapper(
 impl Plugin for PbmpmPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Grid { cells: Vec::new() })
+           .insert_resource(bukkit::BukkitConfig::default()) 
+           .insert_resource(bukkit::BukkitSystem::new(&bukkit::BukkitConfig::default()))
            .insert_resource(self.config.clone())
            .add_systems(Startup, init_grid)
            .add_systems(
                FixedUpdate,
                (
-                   zero_grid,
+                   zero_grid,  // Replace zero_grid with selective clear later on when we have bukkits
+                   bukkit::assign_particles_to_bukkits,
                    particle_to_grid_mass_velocity,
                    particle_to_grid_forces,
                    calculate_grid_velocities_wrapper,
