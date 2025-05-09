@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use crate::grid::{Grid, GRID_RESOLUTION};
 use crate::solver::Particle;
+use std::time::Instant;
 
 /// Configuration for the bukkit system
 #[derive(Resource, Clone)]
@@ -20,6 +21,14 @@ impl Default for BukkitConfig {
     }
 }
 
+/// Thread group data structure - minimal version of EA's BukkitThreadData
+#[derive(Clone, Debug)]
+pub struct BukkitThreadData {
+    pub bukkit_index: usize,
+    pub bukkit_x: usize,
+    pub bukkit_y: usize,
+}
+
 /// Core data structure for the bukkit spatial partitioning system
 #[derive(Resource)]
 pub struct BukkitSystem {
@@ -27,6 +36,7 @@ pub struct BukkitSystem {
     pub count_y: usize,
     pub particle_indices: Vec<Vec<Entity>>,
     pub active_grid_cells: Vec<usize>,
+    pub thread_data: Vec<BukkitThreadData>,
 }
 
 impl BukkitSystem {
@@ -40,16 +50,15 @@ impl BukkitSystem {
             count_y,
             particle_indices: vec![Vec::with_capacity(config.capacity_hint); total_bukkits],
             active_grid_cells: Vec::with_capacity(GRID_RESOLUTION * GRID_RESOLUTION / 4),
+            thread_data: Vec::with_capacity(total_bukkits),
         }
     }
     
-    /// Track a grid cell as active (used this frame)
     #[inline]
     pub fn mark_grid_cell_active(&mut self, cell_idx: usize) {
         self.active_grid_cells.push(cell_idx);
     }
     
-    /// Get the grid range for a given bukkit (including halo)
     pub fn get_grid_range(&self, bukkit_idx: usize, config: &BukkitConfig) -> (usize, usize, usize, usize) {
         let bukkit_x = bukkit_idx % self.count_x;
         let bukkit_y = bukkit_idx / self.count_x;
@@ -63,7 +72,6 @@ impl BukkitSystem {
     }
 }
 
-/// Convert particle position to bukkit index
 #[inline]
 pub fn position_to_bukkit_id(position: Vec2, bukkit_size: usize) -> UVec2 {
     UVec2::new(
@@ -72,45 +80,66 @@ pub fn position_to_bukkit_id(position: Vec2, bukkit_size: usize) -> UVec2 {
     )
 }
 
-/// Convert bukkit coordinates to linear index
 #[inline]
 pub fn bukkit_address_to_index(address: UVec2, bukkit_count_x: usize) -> usize {
     address.y as usize * bukkit_count_x + address.x as usize
 }
 
-/// System to assign particles to bukkits
 pub fn assign_particles_to_bukkits(
     query: Query<(Entity, &Particle)>,
     mut bukkits: ResMut<BukkitSystem>,
     config: Res<BukkitConfig>,
 ) {
+    let start = Instant::now();
+    
     // Clear previous assignments
     for indices in &mut bukkits.particle_indices {
         indices.clear();
     }
+    bukkits.active_grid_cells.clear();
+    bukkits.thread_data.clear();
     
-    // Assign particles to bukkits
-    for (entity, particle) in query.iter() {
-        let bukkit_pos = position_to_bukkit_id(particle.position, config.size);
+    // Store bukkit size locally to avoid borrow issues
+    let bukkit_size = config.size;
+    let count_x = bukkits.count_x;
+    
+    // First phase: assign particles to bukkits
+    for (entity, particle) in &query {
+        let bukkit_pos = position_to_bukkit_id(particle.position, bukkit_size);
         
-        if bukkit_pos.x < bukkits.count_x as u32 && bukkit_pos.y < bukkits.count_y as u32 {
-            let bukkit_idx = bukkit_address_to_index(bukkit_pos, bukkits.count_x);
+        if bukkit_pos.x < count_x as u32 && bukkit_pos.y < bukkits.count_y as u32 {
+            let bukkit_idx = bukkit_address_to_index(bukkit_pos, count_x);
             bukkits.particle_indices[bukkit_idx].push(entity);
         }
     }
     
-    // Clear active grid cells for the next frame
-    bukkits.active_grid_cells.clear();
+    // Second phase: generate thread data for non-empty bukkits
+    for bukkit_idx in 0..bukkits.particle_indices.len() {
+        if !bukkits.particle_indices[bukkit_idx].is_empty() {
+            bukkits.thread_data.push(BukkitThreadData {
+                bukkit_index: bukkit_idx,
+                bukkit_x: bukkit_idx % count_x,
+                bukkit_y: bukkit_idx / count_x,
+            });
+        }
+    }
+    
+    let elapsed = start.elapsed().as_secs_f32() * 1000.0;
+    info!("bukkit_assign: {:.3}ms", elapsed);
 }
 
-/// Selectively clear only the grid cells that were used
 pub fn selective_grid_clear(
     mut grid: ResMut<Grid>,
     bukkits: Res<BukkitSystem>,
 ) {
+    let start = Instant::now();
+    
     for &cell_idx in &bukkits.active_grid_cells {
         if cell_idx < grid.cells.len() {
             grid.cells[cell_idx].zero();
         }
     }
+    
+    let elapsed = start.elapsed().as_secs_f32() * 1000.0;
+    info!("selective_grid_clear: {:.3}ms", elapsed);
 }

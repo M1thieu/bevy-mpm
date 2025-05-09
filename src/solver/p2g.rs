@@ -1,9 +1,11 @@
 use bevy::prelude::*;
+use std::time::Instant;
 
 use crate::constants;
 use crate::grid::{Cell, Grid, GRID_RESOLUTION, calculate_grid_weights};
 use crate::simulation::MaterialType;
 use crate::solver::Particle;
+use crate::bukkit::BukkitSystem;
 
 // Constants 
 const EOS_STIFFNESS: f32 = 10.0;
@@ -13,8 +15,11 @@ const DYNAMIC_VISCOSITY: f32 = 0.1;
 
 pub fn particle_to_grid_mass_velocity(
     query: Query<&Particle>,
-    mut grid: ResMut<Grid>
+    mut grid: ResMut<Grid>,
+    mut bukkits: ResMut<BukkitSystem>
 ) {
+    let start = Instant::now();
+    
     for particle in query {
         let (cell_index, weights) = calculate_grid_weights(particle.position);
 
@@ -31,29 +36,38 @@ pub fn particle_to_grid_mass_velocity(
                 let mass_contribution = weight * particle.mass;
 
                 // Fixed indexing: y * width + x for row-major order
-                let cell_index =
+                let cell_idx =
                     cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
 
-                let cell = grid.cells.get_mut(cell_index).unwrap();
-
-                cell.mass += mass_contribution;
-
-                cell.velocity += mass_contribution * (particle.velocity + q);
+                if let Some(cell) = grid.cells.get_mut(cell_idx) {
+                    cell.mass += mass_contribution;
+                    cell.velocity += mass_contribution * (particle.velocity + q);
+                    
+                    // Mark this cell as active
+                    bukkits.mark_grid_cell_active(cell_idx);
+                }
             }
         }
     }
+    
+    let elapsed = start.elapsed().as_secs_f32() * 1000.0;
+    info!("p2g_mass: {:.3}ms", elapsed);
 }
 
 pub fn particle_to_grid_forces(
     time: Res<Time>,
     query: Query<&Particle>,
-    mut grid: ResMut<Grid>
+    mut grid: ResMut<Grid>,
+    mut bukkits: ResMut<BukkitSystem>
 ) {
+    let start = Instant::now();
+    
     for particle in query {
         let (cell_index, weights) = calculate_grid_weights(particle.position);
 
         let mut density = 0.0;
 
+        // Density calculation
         for gx in 0..3 {
             for gy in 0..3 {
                 let weight = weights[gx].x * weights[gy].y;
@@ -62,12 +76,12 @@ pub fn particle_to_grid_forces(
                     UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
 
                 // Fixed indexing: y * width + x for row-major order
-                let cell_index =
+                let cell_idx =
                     cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
 
-                let cell = grid.cells.get_mut(cell_index).unwrap();
-
-                density += cell.mass * weight;
+                if let Some(cell) = grid.cells.get(cell_idx) {
+                    density += cell.mass * weight;
+                }
             }
         }
 
@@ -90,6 +104,7 @@ pub fn particle_to_grid_forces(
 
         let eq_16_term_0 = -volume * 4.0 * stress * time.delta_secs();
 
+        // Momentum calculation
         for gx in 0..3 {
             for gy in 0..3 {
                 let weight = weights[gx].x * weights[gy].y;
@@ -99,14 +114,20 @@ pub fn particle_to_grid_forces(
                 let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
 
                 // Fixed indexing: y * width + x for row-major order
-                let cell_index =
+                let cell_idx =
                     cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
-                let cell = grid.cells.get_mut(cell_index).unwrap();
-
-                let momentum = eq_16_term_0 * weight * cell_distance;
-
-                cell.velocity += momentum;
+                
+                if let Some(cell) = grid.cells.get_mut(cell_idx) {
+                    let momentum = eq_16_term_0 * weight * cell_distance;
+                    cell.velocity += momentum;
+                    
+                    // Mark this cell as active
+                    bukkits.mark_grid_cell_active(cell_idx);
+                }
             }
         }
     }
+    
+    let elapsed = start.elapsed().as_secs_f32() * 1000.0;
+    info!("p2g_forces: {:.3}ms", elapsed);
 }

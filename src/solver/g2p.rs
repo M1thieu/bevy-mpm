@@ -1,17 +1,19 @@
 use bevy::prelude::*;
 use crate::grid::{Grid, GRID_RESOLUTION, calculate_grid_weights};
 use crate::solver::Particle;
-use crate::simulation::MaterialType;
-use crate::constraints::solve_incompressibility_constraint;
+use crate::bukkit::BukkitSystem;
+use std::time::Instant;
 
 pub fn grid_to_particle(
     time: Res<Time>,
     mut query: Query<&mut Particle>,
-    grid: Res<Grid>
+    grid: Res<Grid>,
+    mut bukkits: ResMut<BukkitSystem>
 ) {
+    let start = Instant::now();
+    
+    // First pass: process particles
     query.par_iter_mut().for_each(|mut particle| {
-        // Store position in a local variable to avoid borrow issues
-        // and improve cache locality
         let position = particle.position;
         
         // Reset velocity
@@ -27,11 +29,11 @@ pub fn grid_to_particle(
             for gy in 0..3 {
                 let weight = weights[gx].x * weights[gy].y;
                 let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-                let cell_index = cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
+                let cell_idx = cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
 
-                if cell_index < grid.cells.len() {
+                if cell_idx < grid.cells.len() {
                     let cell_distance = (cell_position.as_vec2() - position) + 0.5;
-                    let weighted_velocity = grid.cells[cell_index].velocity * weight;
+                    let weighted_velocity = grid.cells[cell_idx].velocity * weight;
 
                     let term = Mat2::from_cols(
                         weighted_velocity * cell_distance.x, 
@@ -47,7 +49,7 @@ pub fn grid_to_particle(
         // Scale the deformation matrix
         deformation_matrix *= 4.0;
         
-        // Update particle - constraints will be handled by solve_constraints_pbmpm
+        // Update particle
         particle.deformation_displacement = deformation_matrix;
         particle.affine_momentum_matrix = deformation_matrix;
         particle.velocity = velocity_sum;
@@ -61,4 +63,24 @@ pub fn grid_to_particle(
             Vec2::splat(GRID_RESOLUTION as f32 - 2.0)
         );
     });
+    
+    // Second pass: mark active cells (sequential)
+    for particle in query.iter() {
+        let position = particle.position;
+        let (cell_index, weights) = calculate_grid_weights(position);
+
+        for gx in 0..3 {
+            for gy in 0..3 {
+                let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                let cell_idx = cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
+
+                if cell_idx < grid.cells.len() {
+                    bukkits.mark_grid_cell_active(cell_idx);
+                }
+            }
+        }
+    }
+    
+    let elapsed = start.elapsed().as_secs_f32() * 1000.0;
+    info!("g2p: {:.3}ms", elapsed);
 }
