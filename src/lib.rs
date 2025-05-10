@@ -75,7 +75,9 @@ impl Plugin for PbmpmPlugin {
                FixedUpdate,
                (
                    bukkit::selective_grid_clear,
-                   bukkit::assign_particles_to_bukkits,
+                   bukkit::count_particles_per_bukkit,
+                   bukkit::allocate_bukkit_memory,
+                   bukkit::insert_particles_to_bukkits,
                    particle_to_grid_mass_velocity,
                    particle_to_grid_forces,
                    calculate_grid_velocities_wrapper,

@@ -27,6 +27,8 @@ pub struct BukkitThreadData {
     pub bukkit_index: usize,
     pub bukkit_x: usize,
     pub bukkit_y: usize,
+    pub range_start: usize,    // Start index in allocated buffer
+    pub range_count: usize,    // Number of particles in this bukkit
 }
 
 /// Core data structure for the bukkit spatial partitioning system
@@ -37,6 +39,8 @@ pub struct BukkitSystem {
     pub particle_indices: Vec<Vec<Entity>>,
     pub active_grid_cells: Vec<usize>,
     pub thread_data: Vec<BukkitThreadData>,
+    pub particle_counts: Vec<usize>,           // Count per bukkit
+    pub allocated_indices: Vec<Entity>,         // Pre-allocated contiguous buffer
 }
 
 impl BukkitSystem {
@@ -51,6 +55,8 @@ impl BukkitSystem {
             particle_indices: vec![Vec::with_capacity(config.capacity_hint); total_bukkits],
             active_grid_cells: Vec::with_capacity(GRID_RESOLUTION * GRID_RESOLUTION / 4),
             thread_data: Vec::with_capacity(total_bukkits),
+            particle_counts: vec![0; total_bukkits],
+            allocated_indices: Vec::new(),
         }
     }
     
@@ -85,47 +91,106 @@ pub fn bukkit_address_to_index(address: UVec2, bukkit_count_x: usize) -> usize {
     address.y as usize * bukkit_count_x + address.x as usize
 }
 
-pub fn assign_particles_to_bukkits(
+// Phase 1: Count particles per bukkit
+pub fn count_particles_per_bukkit(
+    query: Query<&Particle>,
+    mut bukkits: ResMut<BukkitSystem>,
+    config: Res<BukkitConfig>,
+) {
+    let start = Instant::now();
+    
+    // Reset counts
+    for count in &mut bukkits.particle_counts {
+        *count = 0;
+    }
+    
+    // Count particles per bukkit
+    for particle in &query {
+        let bukkit_pos = position_to_bukkit_id(particle.position, config.size);
+        
+        if bukkit_pos.x < bukkits.count_x as u32 && bukkit_pos.y < bukkits.count_y as u32 {
+            let bukkit_idx = bukkit_address_to_index(bukkit_pos, bukkits.count_x);
+            bukkits.particle_counts[bukkit_idx] += 1;
+        }
+    }
+    
+    let elapsed = start.elapsed().as_secs_f32() * 1000.0;
+    info!("bukkit_count: {:.3}ms", elapsed);
+}
+
+// Phase 2: Allocate contiguous memory for particle indices
+pub fn allocate_bukkit_memory(
+    mut bukkits: ResMut<BukkitSystem>,
+) {
+    let start = Instant::now();
+    
+    // Calculate total needed capacity
+    let total_particles: usize = bukkits.particle_counts.iter().sum();
+    
+    // Allocate contiguous buffer
+    bukkits.allocated_indices.clear();
+    bukkits.allocated_indices.resize(total_particles, Entity::PLACEHOLDER);
+    
+    // Extract values to avoid borrowing conflicts
+    let count_x = bukkits.count_x;
+    let particle_counts = bukkits.particle_counts.clone();
+    
+    // Generate thread data with pre-calculated ranges
+    bukkits.thread_data.clear();
+    let mut range_start = 0;
+    
+    for (bukkit_idx, &count) in particle_counts.iter().enumerate() {
+        if count > 0 {
+            bukkits.thread_data.push(BukkitThreadData {
+                bukkit_index: bukkit_idx,
+                bukkit_x: bukkit_idx % count_x,
+                bukkit_y: bukkit_idx / count_x,
+                range_start,
+                range_count: count,
+            });
+            
+            range_start += count;
+        }
+    }
+    
+    let elapsed = start.elapsed().as_secs_f32() * 1000.0;
+    info!("bukkit_allocate: {:.3}ms", elapsed);
+}
+
+// Phase 3: Insert particles into allocated ranges
+pub fn insert_particles_to_bukkits(
     query: Query<(Entity, &Particle)>,
     mut bukkits: ResMut<BukkitSystem>,
     config: Res<BukkitConfig>,
 ) {
     let start = Instant::now();
     
-    // Clear previous assignments
+    // Reset particle indices
+    bukkits.active_grid_cells.clear();
     for indices in &mut bukkits.particle_indices {
         indices.clear();
     }
-    bukkits.active_grid_cells.clear();
-    bukkits.thread_data.clear();
     
-    // Store bukkit size locally to avoid borrow issues
-    let bukkit_size = config.size;
-    let count_x = bukkits.count_x;
-    
-    // First phase: assign particles to bukkits
+    // Insert particles into pre-allocated ranges
     for (entity, particle) in &query {
-        let bukkit_pos = position_to_bukkit_id(particle.position, bukkit_size);
+        let bukkit_pos = position_to_bukkit_id(particle.position, config.size);
         
-        if bukkit_pos.x < count_x as u32 && bukkit_pos.y < bukkits.count_y as u32 {
-            let bukkit_idx = bukkit_address_to_index(bukkit_pos, count_x);
-            bukkits.particle_indices[bukkit_idx].push(entity);
-        }
-    }
-    
-    // Second phase: generate thread data for non-empty bukkits
-    for bukkit_idx in 0..bukkits.particle_indices.len() {
-        if !bukkits.particle_indices[bukkit_idx].is_empty() {
-            bukkits.thread_data.push(BukkitThreadData {
-                bukkit_index: bukkit_idx,
-                bukkit_x: bukkit_idx % count_x,
-                bukkit_y: bukkit_idx / count_x,
-            });
+        if bukkit_pos.x < bukkits.count_x as u32 && bukkit_pos.y < bukkits.count_y as u32 {
+            let bukkit_idx = bukkit_address_to_index(bukkit_pos, bukkits.count_x);
+            
+            // Find the thread data for this bukkit
+            if let Some(thread_data) = bukkits.thread_data.iter().find(|td| td.bukkit_index == bukkit_idx) {
+                let insert_pos = thread_data.range_start + bukkits.particle_indices[bukkit_idx].len();
+                if insert_pos < thread_data.range_start + thread_data.range_count {
+                    bukkits.allocated_indices[insert_pos] = entity;
+                    bukkits.particle_indices[bukkit_idx].push(entity);
+                }
+            }
         }
     }
     
     let elapsed = start.elapsed().as_secs_f32() * 1000.0;
-    info!("bukkit_assign: {:.3}ms", elapsed);
+    info!("bukkit_insert: {:.3}ms", elapsed);
 }
 
 pub fn selective_grid_clear(
