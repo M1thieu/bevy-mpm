@@ -9,7 +9,7 @@ use crate::PbmpmConfig;
 pub fn solve_constraints_pbmpm(
     mut query: Query<&mut Particle>,
     config: Res<PbmpmConfig>,
-    mut bukkits: ResMut<BukkitSystem>
+    bukkits: Res<BukkitSystem>
 ) {
     // Create our constraint solvers
     let incompressibility_solver = IncompressibilityConstraint;

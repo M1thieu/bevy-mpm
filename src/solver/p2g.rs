@@ -37,6 +37,15 @@ pub fn particle_to_grid_mass_velocity(
 
                         let cell_position =
                             UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                        
+                        // Skip cells outside this bukkit's grid range
+                        if cell_position.x < bukkit_data.grid_min_x as u32 || 
+                           cell_position.x >= bukkit_data.grid_max_x as u32 ||
+                           cell_position.y < bukkit_data.grid_min_y as u32 || 
+                           cell_position.y >= bukkit_data.grid_max_y as u32 {
+                            continue;
+                        }
+                        
                         let cell_distance =
                             (cell_position.as_vec2() - particle.position) + 0.5;
                         let q = particle.affine_momentum_matrix * cell_distance;
@@ -94,6 +103,14 @@ pub fn particle_to_grid_forces(
 
                         let cell_position =
                             UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                        
+                        // Skip cells outside this bukkit's grid range
+                        if cell_position.x < bukkit_data.grid_min_x as u32 || 
+                           cell_position.x >= bukkit_data.grid_max_x as u32 ||
+                           cell_position.y < bukkit_data.grid_min_y as u32 || 
+                           cell_position.y >= bukkit_data.grid_max_y as u32 {
+                            continue;
+                        }
 
                         // Fixed indexing: y * width + x for row-major order
                         let cell_idx =
@@ -131,6 +148,15 @@ pub fn particle_to_grid_forces(
 
                         let cell_position =
                             UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                        
+                        // Skip cells outside this bukkit's grid range
+                        if cell_position.x < bukkit_data.grid_min_x as u32 || 
+                           cell_position.x >= bukkit_data.grid_max_x as u32 ||
+                           cell_position.y < bukkit_data.grid_min_y as u32 || 
+                           cell_position.y >= bukkit_data.grid_max_y as u32 {
+                            continue;
+                        }
+                        
                         let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
 
                         // Fixed indexing: y * width + x for row-major order

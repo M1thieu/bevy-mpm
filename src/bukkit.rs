@@ -29,6 +29,10 @@ pub struct BukkitThreadData {
     pub bukkit_y: usize,
     pub range_start: usize,    // Start index in allocated buffer
     pub range_count: usize,    // Number of particles in this bukkit
+    pub grid_min_x: usize,     // Minimum grid cell x
+    pub grid_min_y: usize,     // Minimum grid cell y
+    pub grid_max_x: usize,     // Maximum grid cell x
+    pub grid_max_y: usize,     // Maximum grid cell y
 }
 
 /// Core data structure for the bukkit spatial partitioning system
@@ -91,6 +95,17 @@ pub fn bukkit_address_to_index(address: UVec2, bukkit_count_x: usize) -> usize {
     address.y as usize * bukkit_count_x + address.x as usize
 }
 
+#[inline]
+fn calculate_bukkit_grid_range(bukkit_x: usize, bukkit_y: usize, size: usize, halo: usize) 
+    -> (usize, usize, usize, usize) {
+    let min_grid_x = bukkit_x.saturating_mul(size).saturating_sub(halo);
+    let min_grid_y = bukkit_y.saturating_mul(size).saturating_sub(halo);
+    let max_grid_x = ((bukkit_x + 1) * size + halo).min(GRID_RESOLUTION);
+    let max_grid_y = ((bukkit_y + 1) * size + halo).min(GRID_RESOLUTION);
+    
+    (min_grid_x, min_grid_y, max_grid_x, max_grid_y)
+}
+
 // Phase 1: Count particles per bukkit
 pub fn count_particles_per_bukkit(
     query: Query<&Particle>,
@@ -121,6 +136,7 @@ pub fn count_particles_per_bukkit(
 // Phase 2: Allocate contiguous memory for particle indices
 pub fn allocate_bukkit_memory(
     mut bukkits: ResMut<BukkitSystem>,
+    config: Res<BukkitConfig>,
 ) {
     let start = Instant::now();
     
@@ -141,12 +157,24 @@ pub fn allocate_bukkit_memory(
     
     for (bukkit_idx, &count) in particle_counts.iter().enumerate() {
         if count > 0 {
+            // Calculate bukkit x,y coordinates
+            let bukkit_x = bukkit_idx % count_x;
+            let bukkit_y = bukkit_idx / count_x;
+            
+            // Calculate grid ranges for this bukkit (with halo)
+            let (grid_min_x, grid_min_y, grid_max_x, grid_max_y) = 
+                calculate_bukkit_grid_range(bukkit_x, bukkit_y, config.size, config.halo);
+            
             bukkits.thread_data.push(BukkitThreadData {
                 bukkit_index: bukkit_idx,
-                bukkit_x: bukkit_idx % count_x,
-                bukkit_y: bukkit_idx / count_x,
+                bukkit_x,
+                bukkit_y,
                 range_start,
                 range_count: count,
+                grid_min_x,
+                grid_min_y,
+                grid_max_x,
+                grid_max_y,
             });
             
             range_start += count;

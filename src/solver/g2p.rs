@@ -38,6 +38,15 @@ pub fn grid_to_particle(
                     for gy in 0..3 {
                         let weight = weights[gx].x * weights[gy].y;
                         let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                        
+                        // Skip cells outside this bukkit's grid range
+                        if cell_position.x < bukkit_data.grid_min_x as u32 || 
+                           cell_position.x >= bukkit_data.grid_max_x as u32 ||
+                           cell_position.y < bukkit_data.grid_min_y as u32 || 
+                           cell_position.y >= bukkit_data.grid_max_y as u32 {
+                            continue;
+                        }
+                        
                         let cell_idx = cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
 
                         if cell_idx < grid.cells.len() {
@@ -76,6 +85,15 @@ pub fn grid_to_particle(
                 for gx in 0..3 {
                     for gy in 0..3 {
                         let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                        
+                        // Skip cells outside this bukkit's grid range
+                        if cell_position.x < bukkit_data.grid_min_x as u32 || 
+                           cell_position.x >= bukkit_data.grid_max_x as u32 ||
+                           cell_position.y < bukkit_data.grid_min_y as u32 || 
+                           cell_position.y >= bukkit_data.grid_max_y as u32 {
+                            continue;
+                        }
+                        
                         let cell_idx = cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
 
                         if cell_idx < grid.cells.len() {
