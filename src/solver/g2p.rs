@@ -12,70 +12,76 @@ pub fn grid_to_particle(
 ) {
     let start = Instant::now();
     
-    // First pass: process particles
-    query.par_iter_mut().for_each(|mut particle| {
-        let position = particle.position;
-        
-        // Reset velocity
-        particle.velocity = Vec2::ZERO;
-        
-        let (cell_index, weights) = calculate_grid_weights(position);
-
-        // Gather grid information
-        let mut velocity_sum = Vec2::ZERO;
-        let mut deformation_matrix = Mat2::ZERO;
-
-        for gx in 0..3 {
-            for gy in 0..3 {
-                let weight = weights[gx].x * weights[gy].y;
-                let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-                let cell_idx = cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
-
-                if cell_idx < grid.cells.len() {
-                    let cell_distance = (cell_position.as_vec2() - position) + 0.5;
-                    let weighted_velocity = grid.cells[cell_idx].velocity * weight;
-
-                    let term = Mat2::from_cols(
-                        weighted_velocity * cell_distance.x, 
-                        weighted_velocity * cell_distance.y
-                    );
-                    
-                    deformation_matrix += term;
-                    velocity_sum += weighted_velocity;
-                }
-            }
-        }
-
-        // Scale the deformation matrix
-        deformation_matrix *= 4.0;
-        
-        // Update particle
-        particle.deformation_displacement = deformation_matrix;
-        particle.affine_momentum_matrix = deformation_matrix;
-        particle.velocity = velocity_sum;
-        
-        // Update position
-        particle.position += velocity_sum * time.delta_secs();
-        
-        // Apply boundary constraint
-        particle.position = particle.position.clamp(
-            Vec2::splat(1.0),
-            Vec2::splat(GRID_RESOLUTION as f32 - 2.0)
-        );
-    });
+    // Clone data to avoid borrowing issues
+    let thread_data = bukkits.thread_data.clone();
+    let particle_indices = bukkits.particle_indices.clone();
     
-    // Second pass: mark active cells (sequential)
-    for particle in query.iter() {
-        let position = particle.position;
-        let (cell_index, weights) = calculate_grid_weights(position);
+    // Process particles by bukkit for better cache locality
+    for bukkit_data in &thread_data {
+        let bukkit_idx = bukkit_data.bukkit_index;
+        
+        // Get all particles in this bukkit
+        for &entity in &particle_indices[bukkit_idx] {
+            if let Ok(mut particle) = query.get_mut(entity) {
+                let position = particle.position;
+                
+                // Reset velocity
+                particle.velocity = Vec2::ZERO;
+                
+                let (cell_index, weights) = calculate_grid_weights(position);
 
-        for gx in 0..3 {
-            for gy in 0..3 {
-                let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-                let cell_idx = cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
+                // Gather grid information
+                let mut velocity_sum = Vec2::ZERO;
+                let mut deformation_matrix = Mat2::ZERO;
 
-                if cell_idx < grid.cells.len() {
-                    bukkits.mark_grid_cell_active(cell_idx);
+                for gx in 0..3 {
+                    for gy in 0..3 {
+                        let weight = weights[gx].x * weights[gy].y;
+                        let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                        let cell_idx = cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
+
+                        if cell_idx < grid.cells.len() {
+                            let cell_distance = (cell_position.as_vec2() - position) + 0.5;
+                            let weighted_velocity = grid.cells[cell_idx].velocity * weight;
+
+                            let term = Mat2::from_cols(
+                                weighted_velocity * cell_distance.x, 
+                                weighted_velocity * cell_distance.y
+                            );
+                            
+                            deformation_matrix += term;
+                            velocity_sum += weighted_velocity;
+                        }
+                    }
+                }
+
+                // Scale the deformation matrix
+                deformation_matrix *= 4.0;
+                
+                // Update particle
+                particle.deformation_displacement = deformation_matrix;
+                particle.affine_momentum_matrix = deformation_matrix;
+                particle.velocity = velocity_sum;
+                
+                // Update position
+                particle.position += velocity_sum * time.delta_secs();
+                
+                // Apply boundary constraint
+                particle.position = particle.position.clamp(
+                    Vec2::splat(1.0),
+                    Vec2::splat(GRID_RESOLUTION as f32 - 2.0)
+                );
+                
+                // Mark active cells for this particle
+                for gx in 0..3 {
+                    for gy in 0..3 {
+                        let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                        let cell_idx = cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
+
+                        if cell_idx < grid.cells.len() {
+                            bukkits.mark_grid_cell_active(cell_idx);
+                        }
+                    }
                 }
             }
         }

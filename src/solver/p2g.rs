@@ -1,9 +1,7 @@
 use bevy::prelude::*;
 use std::time::Instant;
 
-use crate::constants;
-use crate::grid::{Cell, Grid, GRID_RESOLUTION, calculate_grid_weights};
-use crate::simulation::MaterialType;
+use crate::grid::{Grid, GRID_RESOLUTION, calculate_grid_weights};
 use crate::solver::Particle;
 use crate::bukkit::BukkitSystem;
 
@@ -20,31 +18,43 @@ pub fn particle_to_grid_mass_velocity(
 ) {
     let start = Instant::now();
     
-    for particle in query {
-        let (cell_index, weights) = calculate_grid_weights(particle.position);
+    // Clone both the thread data and particle indices to avoid borrowing issues
+    let thread_data = bukkits.thread_data.clone();
+    let particle_indices = bukkits.particle_indices.clone();
+    
+    // Process particles by bukkit for better cache locality
+    for bukkit_data in &thread_data {
+        let bukkit_idx = bukkit_data.bukkit_index;
+        
+        // Get all particles in this bukkit
+        for &entity in &particle_indices[bukkit_idx] {
+            if let Ok(particle) = query.get(entity) {
+                let (cell_index, weights) = calculate_grid_weights(particle.position);
 
-        for gx in 0..3 {
-            for gy in 0..3 {
-                let weight = weights[gx].x * weights[gy].y;
+                for gx in 0..3 {
+                    for gy in 0..3 {
+                        let weight = weights[gx].x * weights[gy].y;
 
-                let cell_position =
-                    UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-                let cell_distance =
-                    (cell_position.as_vec2() - particle.position) + 0.5;
-                let q = particle.affine_momentum_matrix * cell_distance;
+                        let cell_position =
+                            UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                        let cell_distance =
+                            (cell_position.as_vec2() - particle.position) + 0.5;
+                        let q = particle.affine_momentum_matrix * cell_distance;
 
-                let mass_contribution = weight * particle.mass;
+                        let mass_contribution = weight * particle.mass;
 
-                // Fixed indexing: y * width + x for row-major order
-                let cell_idx =
-                    cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
+                        // Fixed indexing: y * width + x for row-major order
+                        let cell_idx =
+                            cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
 
-                if let Some(cell) = grid.cells.get_mut(cell_idx) {
-                    cell.mass += mass_contribution;
-                    cell.velocity += mass_contribution * (particle.velocity + q);
-                    
-                    // Mark this cell as active
-                    bukkits.mark_grid_cell_active(cell_idx);
+                        if let Some(cell) = grid.cells.get_mut(cell_idx) {
+                            cell.mass += mass_contribution;
+                            cell.velocity += mass_contribution * (particle.velocity + q);
+                            
+                            // Mark this cell as active
+                            bukkits.mark_grid_cell_active(cell_idx);
+                        }
+                    }
                 }
             }
         }
@@ -62,67 +72,79 @@ pub fn particle_to_grid_forces(
 ) {
     let start = Instant::now();
     
-    for particle in query {
-        let (cell_index, weights) = calculate_grid_weights(particle.position);
+    // Clone both the thread data and particle indices to avoid borrowing issues
+    let thread_data = bukkits.thread_data.clone();
+    let particle_indices = bukkits.particle_indices.clone();
+    
+    // Process particles by bukkit for better cache locality
+    for bukkit_data in &thread_data {
+        let bukkit_idx = bukkit_data.bukkit_index;
+        
+        // Get all particles in this bukkit
+        for &entity in &particle_indices[bukkit_idx] {
+            if let Ok(particle) = query.get(entity) {
+                let (cell_index, weights) = calculate_grid_weights(particle.position);
 
-        let mut density = 0.0;
+                let mut density = 0.0;
 
-        // Density calculation
-        for gx in 0..3 {
-            for gy in 0..3 {
-                let weight = weights[gx].x * weights[gy].y;
+                // Density calculation
+                for gx in 0..3 {
+                    for gy in 0..3 {
+                        let weight = weights[gx].x * weights[gy].y;
 
-                let cell_position =
-                    UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                        let cell_position =
+                            UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
 
-                // Fixed indexing: y * width + x for row-major order
-                let cell_idx =
-                    cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
+                        // Fixed indexing: y * width + x for row-major order
+                        let cell_idx =
+                            cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
 
-                if let Some(cell) = grid.cells.get(cell_idx) {
-                    density += cell.mass * weight;
+                        if let Some(cell) = grid.cells.get(cell_idx) {
+                            density += cell.mass * weight;
+                        }
+                    }
                 }
-            }
-        }
 
-        let volume = particle.mass / density;
+                let volume = particle.mass / density;
 
-        let pressure = f32::max(-0.1, EOS_STIFFNESS * ((density / REST_DENSITY).powi(EOS_POWER as i32) - 1.0));
+                let pressure = f32::max(-0.1, EOS_STIFFNESS * ((density / REST_DENSITY).powi(EOS_POWER as i32) - 1.0));
 
-        let mut stress = Mat2::IDENTITY * -pressure;
+                let mut stress = Mat2::IDENTITY * -pressure;
 
-        let dudv = particle.affine_momentum_matrix;
-        let mut strain = dudv;
+                let dudv = particle.affine_momentum_matrix;
+                let mut strain = dudv;
 
-        let trace = strain.col(1).x + strain.col(0).y;
-        strain.col_mut(0).y = trace;
-        strain.col_mut(1).x = trace;
+                let trace = strain.col(1).x + strain.col(0).y;
+                strain.col_mut(0).y = trace;
+                strain.col_mut(1).x = trace;
 
-        let viscosity_term = DYNAMIC_VISCOSITY * strain;
+                let viscosity_term = DYNAMIC_VISCOSITY * strain;
 
-        stress += viscosity_term;
+                stress += viscosity_term;
 
-        let eq_16_term_0 = -volume * 4.0 * stress * time.delta_secs();
+                let eq_16_term_0 = -volume * 4.0 * stress * time.delta_secs();
 
-        // Momentum calculation
-        for gx in 0..3 {
-            for gy in 0..3 {
-                let weight = weights[gx].x * weights[gy].y;
+                // Momentum calculation
+                for gx in 0..3 {
+                    for gy in 0..3 {
+                        let weight = weights[gx].x * weights[gy].y;
 
-                let cell_position =
-                    UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-                let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
+                        let cell_position =
+                            UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                        let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
 
-                // Fixed indexing: y * width + x for row-major order
-                let cell_idx =
-                    cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
-                
-                if let Some(cell) = grid.cells.get_mut(cell_idx) {
-                    let momentum = eq_16_term_0 * weight * cell_distance;
-                    cell.velocity += momentum;
-                    
-                    // Mark this cell as active
-                    bukkits.mark_grid_cell_active(cell_idx);
+                        // Fixed indexing: y * width + x for row-major order
+                        let cell_idx =
+                            cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
+                        
+                        if let Some(cell) = grid.cells.get_mut(cell_idx) {
+                            let momentum = eq_16_term_0 * weight * cell_distance;
+                            cell.velocity += momentum;
+                            
+                            // Mark this cell as active
+                            bukkits.mark_grid_cell_active(cell_idx);
+                        }
+                    }
                 }
             }
         }
