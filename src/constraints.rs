@@ -10,6 +10,7 @@ pub trait ConstraintSolver {
 }
 
 /// Implementation of incompressibility constraint with analytical derivatives
+#[repr(C)] // GPU memory alignment for future WGPU transition
 pub struct IncompressibilityConstraint;
 
 impl ConstraintSolver for IncompressibilityConstraint {
@@ -52,6 +53,7 @@ impl ConstraintSolver for IncompressibilityConstraint {
 }
 
 /// Placeholder for elastic material constraint
+#[repr(C)] // GPU memory alignment for future WGPU transition
 pub struct ElasticConstraint;
 
 impl ConstraintSolver for ElasticConstraint {
@@ -63,22 +65,24 @@ impl ConstraintSolver for ElasticConstraint {
 
 /// Legacy function for backward compatibility
 /// Use the trait-based implementation for new code
+#[inline]
 pub fn solve_incompressibility_constraint(
     particle: &mut Particle,
     deformation_displacement: &mut Mat2,
     relaxation_factor: f32
-) {
+) -> f32 {
     let constraint = IncompressibilityConstraint;
-    constraint.solve(particle, deformation_displacement, relaxation_factor);
+    constraint.solve(particle, deformation_displacement, relaxation_factor)
 }
 
 /// Legacy function for backward compatibility
 /// Use the trait-based implementation for new code
+#[inline]
 pub fn solve_elastic_constraint(
     particle: &mut Particle,
     deformation_displacement: &mut Mat2,
-    relaxation_factor: f32
-) {
+    relaxation_factor: f32,
+) -> f32 {
     let constraint = ElasticConstraint;
-    constraint.solve(particle, deformation_displacement, relaxation_factor);
+    constraint.solve(particle, deformation_displacement, relaxation_factor)
 }

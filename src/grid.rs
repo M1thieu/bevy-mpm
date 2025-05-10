@@ -4,6 +4,7 @@ use bevy::prelude::*;
 pub const GRID_RESOLUTION: usize = 128;
 
 #[derive(Component)]
+#[repr(C)] // GPU memory alignment for future WGPU transition
 pub struct Cell {
     pub velocity: Vec2,
     pub mass: f32,

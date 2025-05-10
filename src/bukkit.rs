@@ -23,6 +23,8 @@ impl Default for BukkitConfig {
 
 /// Thread group data structure - minimal version of EA's BukkitThreadData
 #[derive(Clone, Debug)]
+#[repr(C)] // GPU memory alignment for future WGPU transition
+
 pub struct BukkitThreadData {
     pub bukkit_index: usize,
     pub bukkit_x: usize,

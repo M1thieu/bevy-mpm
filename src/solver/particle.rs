@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use crate::simulation::MaterialType;
 
 #[derive(Component)]
+#[repr(C)] // GPU memory alignment for future WGPU transition
 pub struct Particle {
     pub position: Vec2,
     pub velocity: Vec2,
