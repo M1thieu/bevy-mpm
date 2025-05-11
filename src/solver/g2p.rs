@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::grid::{Grid, GRID_RESOLUTION, calculate_grid_weights};
+use crate::grid::{Grid, GRID_RESOLUTION, calculate_grid_weights, iter_quadratic_weights, get_grid_cell};
 use crate::solver::Particle;
 use crate::bukkit::BukkitSystem;
 use std::time::Instant;
@@ -34,33 +34,30 @@ pub fn grid_to_particle(
                 let mut velocity_sum = Vec2::ZERO;
                 let mut deformation_matrix = Mat2::ZERO;
 
-                for gx in 0..3 {
-                    for gy in 0..3 {
-                        let weight = weights[gx].x * weights[gy].y;
-                        let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-                        
-                        // Skip cells outside this bukkit's grid range
-                        if cell_position.x < bukkit_data.grid_min_x as u32 || 
-                           cell_position.x >= bukkit_data.grid_max_x as u32 ||
-                           cell_position.y < bukkit_data.grid_min_y as u32 || 
-                           cell_position.y >= bukkit_data.grid_max_y as u32 {
-                            continue;
-                        }
-                        
-                        let cell_idx = cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
+                // NEW: Use iter_quadratic_weights and combine processing + marking
+                for (gx, gy, weight) in iter_quadratic_weights(&weights) {
+                    let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                    
+                    // NEW: Use cell_in_bukkit_range instead of explicit checks
+                    if !bukkit_data.cell_in_bukkit_range(cell_position) {
+                        continue;
+                    }
+                    
+                    // NEW: Use get_grid_cell - single call, process AND mark
+                    if let Some((cell_idx, cell)) = get_grid_cell(&grid, cell_position) {
+                        let cell_distance = (cell_position.as_vec2() - position) + 0.5;
+                        let weighted_velocity = cell.velocity * weight;
 
-                        if cell_idx < grid.cells.len() {
-                            let cell_distance = (cell_position.as_vec2() - position) + 0.5;
-                            let weighted_velocity = grid.cells[cell_idx].velocity * weight;
-
-                            let term = Mat2::from_cols(
-                                weighted_velocity * cell_distance.x, 
-                                weighted_velocity * cell_distance.y
-                            );
-                            
-                            deformation_matrix += term;
-                            velocity_sum += weighted_velocity;
-                        }
+                        let term = Mat2::from_cols(
+                            weighted_velocity * cell_distance.x, 
+                            weighted_velocity * cell_distance.y
+                        );
+                        
+                        deformation_matrix += term;
+                        velocity_sum += weighted_velocity;
+                        
+                        // Mark cell as active immediately (no second lookup!)
+                        bukkits.mark_grid_cell_active(cell_idx);
                     }
                 }
 
@@ -80,27 +77,6 @@ pub fn grid_to_particle(
                     Vec2::splat(1.0),
                     Vec2::splat(GRID_RESOLUTION as f32 - 2.0)
                 );
-                
-                // Mark active cells for this particle
-                for gx in 0..3 {
-                    for gy in 0..3 {
-                        let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-                        
-                        // Skip cells outside this bukkit's grid range
-                        if cell_position.x < bukkit_data.grid_min_x as u32 || 
-                           cell_position.x >= bukkit_data.grid_max_x as u32 ||
-                           cell_position.y < bukkit_data.grid_min_y as u32 || 
-                           cell_position.y >= bukkit_data.grid_max_y as u32 {
-                            continue;
-                        }
-                        
-                        let cell_idx = cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
-
-                        if cell_idx < grid.cells.len() {
-                            bukkits.mark_grid_cell_active(cell_idx);
-                        }
-                    }
-                }
             }
         }
     }

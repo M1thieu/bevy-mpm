@@ -24,7 +24,6 @@ impl Default for BukkitConfig {
 /// Thread group data structure - minimal version of EA's BukkitThreadData
 #[derive(Clone, Debug)]
 #[repr(C)] // GPU memory alignment for future WGPU transition
-
 pub struct BukkitThreadData {
     pub bukkit_index: usize,
     pub bukkit_x: usize,
@@ -35,6 +34,17 @@ pub struct BukkitThreadData {
     pub grid_min_y: usize,     // Minimum grid cell y
     pub grid_max_x: usize,     // Maximum grid cell x
     pub grid_max_y: usize,     // Maximum grid cell y
+}
+
+// NEW: Boundary check method following EA's style
+impl BukkitThreadData {
+    #[inline]
+    pub fn cell_in_bukkit_range(&self, pos: UVec2) -> bool {
+        pos.x >= self.grid_min_x as u32 && 
+        pos.x < self.grid_max_x as u32 &&
+        pos.y >= self.grid_min_y as u32 && 
+        pos.y < self.grid_max_y as u32
+    }
 }
 
 /// Core data structure for the bukkit spatial partitioning system

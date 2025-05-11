@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::time::Instant;
 
-use crate::grid::{Grid, GRID_RESOLUTION, calculate_grid_weights};
+use crate::grid::{Grid, calculate_grid_weights, iter_quadratic_weights, get_grid_cell_mut, get_grid_cell};
 use crate::solver::Particle;
 use crate::bukkit::BukkitSystem;
 
@@ -31,38 +31,33 @@ pub fn particle_to_grid(
             if let Ok(particle) = query.get(entity) {
                 let (cell_index, weights) = calculate_grid_weights(particle.position);
 
-                for gx in 0..3 {
-                    for gy in 0..3 {
-                        let weight = weights[gx].x * weights[gy].y;
-                        let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                // NEW: Use iter_quadratic_weights instead of nested loops
+                for (gx, gy, weight) in iter_quadratic_weights(&weights) {
+                    let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                    
+                    // NEW: Use cell_in_bukkit_range instead of explicit checks
+                    if !bukkit_data.cell_in_bukkit_range(cell_position) {
+                        continue;
+                    }
+                    
+                    let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
+                    let q = particle.affine_momentum_matrix * cell_distance;
+                    let mass_contribution = weight * particle.mass;
+                    
+                    // NEW: Use get_grid_cell_mut instead of manual indexing
+                    if let Some((cell_idx, cell)) = get_grid_cell_mut(&mut grid, cell_position) {
+                        cell.mass += mass_contribution;
+                        cell.velocity += mass_contribution * (particle.velocity + q);
                         
-                        // Skip cells outside this bukkit's grid range
-                        if cell_position.x < bukkit_data.grid_min_x as u32 || 
-                           cell_position.x >= bukkit_data.grid_max_x as u32 ||
-                           cell_position.y < bukkit_data.grid_min_y as u32 || 
-                           cell_position.y >= bukkit_data.grid_max_y as u32 {
-                            continue;
-                        }
-                        
-                        let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
-                        let q = particle.affine_momentum_matrix * cell_distance;
-                        let mass_contribution = weight * particle.mass;
-                        
-                        let cell_idx = cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
-                        if let Some(cell) = grid.cells.get_mut(cell_idx) {
-                            cell.mass += mass_contribution;
-                            cell.velocity += mass_contribution * (particle.velocity + q);
-                            
-                            // Mark this cell as active
-                            bukkits.mark_grid_cell_active(cell_idx);
-                        }
+                        // Mark this cell as active
+                        bukkits.mark_grid_cell_active(cell_idx);
                     }
                 }
             }
         }
     }
     
-    // SECOND PHASE: Forces (using the updated grid masses
+    // SECOND PHASE: Forces (using the updated grid masses)
     for bukkit_data in &thread_data {
         let bukkit_idx = bukkit_data.bukkit_index;
         
@@ -72,24 +67,18 @@ pub fn particle_to_grid(
 
                 let mut density = 0.0;
 
-                // Density calculation
-                for gx in 0..3 {
-                    for gy in 0..3 {
-                        let weight = weights[gx].x * weights[gy].y;
-                        let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-                        
-                        // Skip cells outside this bukkit's grid range
-                        if cell_position.x < bukkit_data.grid_min_x as u32 || 
-                           cell_position.x >= bukkit_data.grid_max_x as u32 ||
-                           cell_position.y < bukkit_data.grid_min_y as u32 || 
-                           cell_position.y >= bukkit_data.grid_max_y as u32 {
-                            continue;
-                        }
+                // Density calculation - NEW: Use optimized patterns
+                for (gx, gy, weight) in iter_quadratic_weights(&weights) {
+                    let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                    
+                    // NEW: Use cell_in_bukkit_range instead of explicit checks
+                    if !bukkit_data.cell_in_bukkit_range(cell_position) {
+                        continue;
+                    }
 
-                        let cell_idx = cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
-                        if let Some(cell) = grid.cells.get(cell_idx) {
-                            density += cell.mass * weight;
-                        }
+                    // NEW: Use get_grid_cell for read-only access
+                    if let Some((_cell_idx, cell)) = get_grid_cell(&grid, cell_position) {
+                        density += cell.mass * weight;
                     }
                 }
 
@@ -106,30 +95,24 @@ pub fn particle_to_grid(
                 stress += DYNAMIC_VISCOSITY * strain;
                 let eq_16_term_0 = -volume * 4.0 * stress * time.delta_secs();
 
-                // Momentum calculation
-                for gx in 0..3 {
-                    for gy in 0..3 {
-                        let weight = weights[gx].x * weights[gy].y;
-                        let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                // Momentum calculation - NEW: Use optimized patterns
+                for (gx, gy, weight) in iter_quadratic_weights(&weights) {
+                    let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                    
+                    // NEW: Use cell_in_bukkit_range instead of explicit checks
+                    if !bukkit_data.cell_in_bukkit_range(cell_position) {
+                        continue;
+                    }
+                    
+                    let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
+                    
+                    // NEW: Use get_grid_cell_mut instead of manual indexing
+                    if let Some((cell_idx, cell)) = get_grid_cell_mut(&mut grid, cell_position) {
+                        let momentum = eq_16_term_0 * weight * cell_distance;
+                        cell.velocity += momentum;
                         
-                        // Skip cells outside this bukkit's grid range
-                        if cell_position.x < bukkit_data.grid_min_x as u32 || 
-                           cell_position.x >= bukkit_data.grid_max_x as u32 ||
-                           cell_position.y < bukkit_data.grid_min_y as u32 || 
-                           cell_position.y >= bukkit_data.grid_max_y as u32 {
-                            continue;
-                        }
-                        
-                        let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
-                        let cell_idx = cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
-                        
-                        if let Some(cell) = grid.cells.get_mut(cell_idx) {
-                            let momentum = eq_16_term_0 * weight * cell_distance;
-                            cell.velocity += momentum;
-                            
-                            // Mark this cell as active
-                            bukkits.mark_grid_cell_active(cell_idx);
-                        }
+                        // Mark this cell as active
+                        bukkits.mark_grid_cell_active(cell_idx);
                     }
                 }
             }
