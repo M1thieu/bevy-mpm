@@ -14,28 +14,22 @@ pub fn solve_constraints_pbmpm(
     // Create our constraint solvers
     let incompressibility_solver = IncompressibilityConstraint;
     
-    // Clone data to avoid borrowing issues
-    let thread_data = bukkits.thread_data.clone();
-    let particle_indices = bukkits.particle_indices.clone();
-    
     // Run multiple iterations of constraint solving
     for iteration in 0..config.iteration_count {
         // Calculate adaptive warm start weight based on iteration progress
         let warm_start_weight = if iteration == 0 {
-            // Use full configured weight for first iteration
             config.warm_start_weight 
         } else {
-            // For subsequent iterations, no warm starting from previous frame
-            // as we're now working within the current frame's solving process
             0.0
         };
         
         // Process particles by bukkit for better cache locality
-        for bukkit_data in &thread_data {
+        // Avoid cloning by iterating directly
+        for bukkit_data in &bukkits.thread_data {
             let bukkit_idx = bukkit_data.bukkit_index;
             
             // Get all particles in this bukkit
-            for &entity in &particle_indices[bukkit_idx] {
+            for &entity in &bukkits.particle_indices[bukkit_idx] {
                 if let Ok(mut particle) = query.get_mut(entity) {
                     // Calculate weighted blend of previous solution and current deformation
                     let mut deformation = 
@@ -58,10 +52,10 @@ pub fn solve_constraints_pbmpm(
     }
     
     // After all iterations are done, store current solution for next frame
-    for bukkit_data in &thread_data {
+    for bukkit_data in &bukkits.thread_data {
         let bukkit_idx = bukkit_data.bukkit_index;
         
-        for &entity in &particle_indices[bukkit_idx] {
+        for &entity in &bukkits.particle_indices[bukkit_idx] {
             if let Ok(mut particle) = query.get_mut(entity) {
                 particle.prev_deformation_displacement = particle.deformation_displacement;
             }
