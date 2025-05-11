@@ -1,7 +1,7 @@
+use std::time::Instant;
 use bevy::prelude::*;
 use crate::grid::{Grid, GRID_RESOLUTION};
 use crate::solver::Particle;
-use std::time::Instant;
 
 /// Configuration for the bukkit system
 #[derive(Resource, Clone)]
@@ -36,7 +36,6 @@ pub struct BukkitThreadData {
     pub grid_max_y: usize,     // Maximum grid cell y
 }
 
-// NEW: Boundary check method following EA's style
 impl BukkitThreadData {
     #[inline]
     pub fn cell_in_bukkit_range(&self, pos: UVec2) -> bool {

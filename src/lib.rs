@@ -8,9 +8,9 @@ pub mod bukkit;
 
 use bevy::prelude::*;
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
-use grid::{Grid, calculate_grid_velocities};
+use grid::*;
 use solver::prelude::*;
-use constants::GRAVITY;
+use constants::*;
 
 #[derive(Resource, Clone)]
 pub struct PbmpmConfig {
@@ -60,7 +60,7 @@ fn calculate_grid_velocities_wrapper(
     time: Res<Time>,
     mut grid: ResMut<Grid>
 ) {
-    calculate_grid_velocities(time, grid, GRAVITY);
+    grid_calculate_velocities(time, grid, GRAVITY);
 }
 
 impl Plugin for PbmpmPlugin {

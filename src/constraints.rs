@@ -16,7 +16,7 @@ pub struct IncompressibilityConstraint;
 impl ConstraintSolver for IncompressibilityConstraint {
     fn solve(&self, particle: &mut Particle, deformation: &mut Mat2, relaxation_factor: f32) -> f32 {
         // Only apply to water materials
-        if let MaterialType::Water { .. } = particle.material_type {
+        if let MaterialType::Liquid { .. } = particle.material_type {
             // Calculate deformation trace (volumetric strain)
             let deformation_trace = deformation.col(0).x + deformation.col(1).y;
             
