@@ -2,18 +2,9 @@ use std::time::Duration;
 
 use bevy::prelude::*;
 use rand::Rng;
-use mpm2d::grid::{Cell, Grid, GRID_RESOLUTION};
 use mpm2d::simulation::MaterialType;
-use mpm2d::constants::GRAVITY;
-use mpm2d::particle::Particle;
-use mpm2d::solver::{particle_to_grid_mass_velocity, particle_to_grid_forces, grid_to_particle};
-
-#[derive(Resource)]
-struct FrameTimer(Timer);
-
-fn init_grid(mut grid: ResMut<Grid>) {
-    grid.cells = vec![Cell::zeroed(); GRID_RESOLUTION * GRID_RESOLUTION];
-}
+use mpm2d::solver::prelude::*;
+use mpm2d::PbmpmPlugin;
 
 fn init_particles(
     mut commands: Commands,
@@ -32,7 +23,11 @@ fn init_particles(
                     velocity: Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0)),
                     mass: 1.0,
                     affine_momentum_matrix: Mat2::ZERO,
-                    material_type: MaterialType::water(),
+<<<<<<< HEAD
+                    deformation_displacement: Mat2::ZERO,
+                    prev_deformation_displacement: Mat2::ZERO,
+                    liquid_density: 1.0,
+                    material_type: MaterialType::Liquid { vp0: 1.0, ap: 0.0, jp: 1.0 },
                 },
                 Mesh2d(meshes.add(Circle::new(1.0))),
                 MeshMaterial2d(materials.add(Color::hsl(210.0, 0.7, 0.3))),
@@ -51,7 +46,11 @@ fn init_particles(
                     velocity: Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0)),
                     mass: 1.0,
                     affine_momentum_matrix: Mat2::ZERO,
-                    material_type: MaterialType::water(),
+<<<<<<< HEAD
+                    deformation_displacement: Mat2::ZERO,
+                    prev_deformation_displacement: Mat2::ZERO,
+                    liquid_density: 1.0,
+                    material_type: MaterialType::Liquid { vp0: 1.0, ap: 0.0, jp: 1.0 },
                 },
                 Mesh2d(meshes.add(Circle::new(1.0))),
                 MeshMaterial2d(materials.add(Color::hsl(210.0, 0.7, 0.3))),
@@ -106,7 +105,10 @@ fn controls(
                 velocity: Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-50.0..=-20.0)),
                 mass: 1.0,
                 affine_momentum_matrix: Mat2::ZERO,
-                material_type: MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 },
+                deformation_displacement: Mat2::ZERO,
+                prev_deformation_displacement: Mat2::ZERO,
+                liquid_density: 1.0,
+                material_type: MaterialType::Liquid { vp0: 1.0, ap: 0.0, jp: 1.0 },
             },
             Mesh2d(handle),
             MeshMaterial2d(materials.add(Color::hsl(0.0, 1.0, 0.5))),
@@ -124,46 +126,18 @@ fn controls(
             projection2d.scale *= 0.25f32.powf(time.delta_secs());
         }
     }
-
 }
 
 fn update_particle_transforms(
     mut query: Query<(&mut Transform, &Particle)>,
 ) {
-    query.par_iter_mut()
-        .for_each(|(mut transform, particle)| {
-            transform.translation = Vec3::new((particle.position.x - 64.0) * 4.0, (particle.position.y - 64.0) * 4.0, 0.0);
-        });
-}
-
-fn calculate_grid_velocities_wrapper(
-    time: Res<Time>,
-    mut grid: ResMut<Grid>
-) {
-    mpm2d::grid::calculate_grid_velocities(time, grid, GRAVITY);
-}
-
-pub struct MpmPlugin;
-
-impl Plugin for MpmPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(Grid { cells: Vec::new() });
-        app.insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(1.0 / 60.0)));
-        app.add_systems(Startup, (init_grid, init_particles).chain());
-        app.add_systems(
-            FixedUpdate,
-            (
-                mpm2d::grid::zero_grid,
-                particle_to_grid_mass_velocity,
-                particle_to_grid_forces,
-                calculate_grid_velocities_wrapper,
-                grid_to_particle,
-                update_particle_transforms,
-                controls,
-            )
-                .chain(),
+    query.par_iter_mut().for_each(|(mut transform, particle)| {
+        transform.translation = Vec3::new(
+            (particle.position.x - 64.0) * 4.0, 
+            (particle.position.y - 64.0) * 4.0, 
+            0.0
         );
-    }
+    });
 }
 
 fn init(mut commands: Commands) {
@@ -173,7 +147,9 @@ fn init(mut commands: Commands) {
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(MpmPlugin)
-        .add_systems(Startup, init)
+        .add_plugins(PbmpmPlugin::default()) // Use the plugin from our library
+        .insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(1.0 / 60.0)))
+        .add_systems(Startup, (init, init_particles))
+        .add_systems(FixedUpdate, (update_particle_transforms, controls).chain())
         .run();
 }
