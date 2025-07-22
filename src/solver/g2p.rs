@@ -24,22 +24,24 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
                     cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
 
                 let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
-                let weighted_velocity = grid.cells.get(cell_index).unwrap().velocity * weight;
+                
+                if let Some(cell) = grid.cells.get(cell_index) {
+                    let weighted_velocity = cell.velocity * weight;
 
-                let term = Mat2::from_cols(
-                    Vec2::new(
-                        weighted_velocity.x * cell_distance.x,
-                        weighted_velocity.y * cell_distance.x,
-                    ),
-                    Vec2::new(
-                        weighted_velocity.x * cell_distance.y,
-                        weighted_velocity.y * cell_distance.y,
-                    ),
-                );
+                    let term = Mat2::from_cols(
+                        Vec2::new(
+                            weighted_velocity.x * cell_distance.x,
+                            weighted_velocity.y * cell_distance.x,
+                        ),
+                        Vec2::new(
+                            weighted_velocity.x * cell_distance.y,
+                            weighted_velocity.y * cell_distance.y,
+                        ),
+                    );
 
-                b += term;
-
-                particle.velocity += weighted_velocity;
+                    b += term;
+                    particle.velocity += weighted_velocity;
+                }
             }
         }
 

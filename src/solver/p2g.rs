@@ -24,11 +24,10 @@ pub fn particle_to_grid_mass_velocity(query: Query<&Particle>, mut grid: ResMut<
                 let cell_index =
                     cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
 
-                let cell = grid.cells.get_mut(cell_index).unwrap();
-
-                cell.mass += mass_contribution;
-
-                cell.velocity += mass_contribution * (particle.velocity + q);
+                if let Some(cell) = grid.cells.get_mut(cell_index) {
+                    cell.mass += mass_contribution;
+                    cell.velocity += mass_contribution * (particle.velocity + q);
+                }
             }
         }
     }
@@ -51,9 +50,9 @@ pub fn particle_to_grid_forces(time: Res<Time>, query: Query<&Particle>, mut gri
                 let cell_index =
                     cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
 
-                let cell = grid.cells.get_mut(cell_index).unwrap();
-
-                density += cell.mass * weight;
+                if let Some(cell) = grid.cells.get_mut(cell_index) {
+                    density += cell.mass * weight;
+                }
             }
         }
 
@@ -97,11 +96,10 @@ pub fn particle_to_grid_forces(time: Res<Time>, query: Query<&Particle>, mut gri
                 // Fixed indexing: y * width + x for row-major order
                 let cell_index =
                     cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
-                let cell = grid.cells.get_mut(cell_index).unwrap();
-
-                let momentum = eq_16_term_0 * weight * cell_distance;
-
-                cell.velocity += momentum;
+                if let Some(cell) = grid.cells.get_mut(cell_index) {
+                    let momentum = eq_16_term_0 * weight * cell_distance;
+                    cell.velocity += momentum;
+                }
             }
         }
     }
