@@ -1,20 +1,11 @@
 use bevy::prelude::*;
 
-use crate::constants;
-use crate::grid::{Cell, Grid, GRID_RESOLUTION, calculate_grid_weights};
-use crate::simulation::MaterialType;
+use crate::constants::{DYNAMIC_VISCOSITY, EOS_POWER, EOS_STIFFNESS, REST_DENSITY};
+use crate::grid::{GRID_RESOLUTION, Grid, calculate_grid_weights};
 use crate::particle::Particle;
+use crate::simulation::MaterialType;
 
-// Constants 
-const EOS_STIFFNESS: f32 = 10.0;
-const EOS_POWER: u8 = 4;
-const REST_DENSITY: f32 = 2.0;
-const DYNAMIC_VISCOSITY: f32 = 0.1;
-
-pub fn particle_to_grid_mass_velocity(
-    query: Query<&Particle>,
-    mut grid: ResMut<Grid>
-) {
+pub fn particle_to_grid_mass_velocity(query: Query<&Particle>, mut grid: ResMut<Grid>) {
     for particle in query {
         let (cell_index, weights) = calculate_grid_weights(particle.position);
 
@@ -24,8 +15,7 @@ pub fn particle_to_grid_mass_velocity(
 
                 let cell_position =
                     UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-                let cell_distance =
-                    (cell_position.as_vec2() - particle.position) + 0.5;
+                let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
                 let q = particle.affine_momentum_matrix * cell_distance;
 
                 let mass_contribution = weight * particle.mass;
@@ -44,11 +34,7 @@ pub fn particle_to_grid_mass_velocity(
     }
 }
 
-pub fn particle_to_grid_forces(
-    time: Res<Time>,
-    query: Query<&Particle>,
-    mut grid: ResMut<Grid>
-) {
+pub fn particle_to_grid_forces(time: Res<Time>, query: Query<&Particle>, mut grid: ResMut<Grid>) {
     for particle in query {
         let (cell_index, weights) = calculate_grid_weights(particle.position);
 
@@ -73,22 +59,32 @@ pub fn particle_to_grid_forces(
 
         let volume = particle.mass / density;
 
-        let pressure = f32::max(-0.1, EOS_STIFFNESS * ((density / REST_DENSITY).powi(EOS_POWER as i32) - 1.0));
+        // Calculate stress based on material type
+        let stress = match &particle.material_type {
+            MaterialType::Water {
+                vp0: _,
+                ap: _,
+                jp: _,
+            } => {
+                // Fluid mechanics: pressure + viscosity
+                let pressure = f32::max(
+                    -0.1,
+                    EOS_STIFFNESS * ((density / REST_DENSITY).powi(EOS_POWER as i32) - 1.0),
+                );
+                let stress = Mat2::IDENTITY * -pressure;
 
-        let mut stress = Mat2::IDENTITY * -pressure;
+                let dudv = particle.affine_momentum_matrix;
+                let mut strain = dudv;
+                let trace = strain.col(1).x + strain.col(0).y;
+                strain.col_mut(0).y = trace;
+                strain.col_mut(1).x = trace;
+                let viscosity_term = DYNAMIC_VISCOSITY * strain;
 
-        let dudv = particle.affine_momentum_matrix;
-        let mut strain = dudv;
+                stress + viscosity_term
+            }
+        };
 
-        let trace = strain.col(1).x + strain.col(0).y;
-        strain.col_mut(0).y = trace;
-        strain.col_mut(1).x = trace;
-
-        let viscosity_term = DYNAMIC_VISCOSITY * strain;
-
-        stress += viscosity_term;
-
-        let eq_16_term_0 = -volume * 4.0 * stress * time.delta_secs();
+        let eq_16_term_0 = -volume * stress * time.delta_secs();
 
         for gx in 0..3 {
             for gy in 0..3 {

@@ -6,18 +6,13 @@ use mpm2d::grid::{Cell, Grid, GRID_RESOLUTION};
 use mpm2d::simulation::MaterialType;
 use mpm2d::constants::GRAVITY;
 use mpm2d::particle::Particle;
-use mpm2d::p2g::{particle_to_grid_mass_velocity, particle_to_grid_forces};
-use mpm2d::g2p::grid_to_particle;
+use mpm2d::solver::{particle_to_grid_mass_velocity, particle_to_grid_forces, grid_to_particle};
 
 #[derive(Resource)]
 struct FrameTimer(Timer);
 
 fn init_grid(mut grid: ResMut<Grid>) {
-    grid.cells.clear();
-    grid.cells.reserve_exact(GRID_RESOLUTION * GRID_RESOLUTION);
-    for _ in 0..(GRID_RESOLUTION * GRID_RESOLUTION) {
-        grid.cells.push(Cell::zeroed());
-    }
+    grid.cells = vec![Cell::zeroed(); GRID_RESOLUTION * GRID_RESOLUTION];
 }
 
 fn init_particles(
@@ -34,10 +29,10 @@ fn init_particles(
                         x: 16.0 + x as f32 / 4.0,
                         y: 32.0 + y as f32 / 4.0,
                     },
-                    velocity: Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-10.0..=10.0)),
+                    velocity: Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0)),
                     mass: 1.0,
                     affine_momentum_matrix: Mat2::ZERO,
-                    material_type: MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 },
+                    material_type: MaterialType::water(),
                 },
                 Mesh2d(meshes.add(Circle::new(1.0))),
                 MeshMaterial2d(materials.add(Color::hsl(210.0, 0.7, 0.3))),
@@ -53,10 +48,10 @@ fn init_particles(
                         x: 112.0 + x as f32 / 4.0,
                         y: 32.0 + y as f32 / 4.0,
                     },
-                    velocity: Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-10.0..=10.0)),
+                    velocity: Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0)),
                     mass: 1.0,
                     affine_momentum_matrix: Mat2::ZERO,
-                    material_type: MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 },
+                    material_type: MaterialType::water(),
                 },
                 Mesh2d(meshes.add(Circle::new(1.0))),
                 MeshMaterial2d(materials.add(Color::hsl(210.0, 0.7, 0.3))),

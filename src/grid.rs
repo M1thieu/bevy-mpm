@@ -1,9 +1,8 @@
 use bevy::prelude::*;
 
-// Constants moved from simulation.rs that are related to the grid
 pub const GRID_RESOLUTION: usize = 128;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct Cell {
     pub velocity: Vec2,
     pub mass: f32,
@@ -28,7 +27,7 @@ pub struct Grid {
     pub cells: Vec<Cell>,
 }
 
-// New helper function to calculate grid weights and positions
+// Calculate quadratic B-spline weights for MPM interpolation
 pub fn calculate_grid_weights(particle_position: Vec2) -> (UVec2, [Vec2; 3]) {
     let cell_index = particle_position.as_uvec2();
     let cell_difference = (particle_position - cell_index.as_vec2()) - 0.5;
