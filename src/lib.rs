@@ -14,6 +14,7 @@ pub use grid::{Grid, Cell, GRID_RESOLUTION};
 use crate::constants::GRAVITY;
 use crate::grid::{zero_grid, calculate_grid_velocities};
 use crate::solver::{particle_to_grid_mass_velocity, particle_to_grid_forces, grid_to_particle};
+use crate::particle::update_particle_grid_indices;
 
 pub struct MpmPlugin;
 
@@ -25,6 +26,7 @@ impl Plugin for MpmPlugin {
         .add_systems(
             Update,
             (
+                update_particle_grid_indices,
                 zero_grid,
                 particle_to_grid_mass_velocity,
                 particle_to_grid_forces,

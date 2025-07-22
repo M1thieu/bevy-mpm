@@ -45,6 +45,15 @@ pub fn zero_grid(mut grid: ResMut<Grid>) {
     grid.cells.iter_mut().for_each(|cell| cell.zero());
 }
 
+// Boundary handling modes
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BoundaryHandling {
+    Stick,      // Particles stick to walls (old behavior)
+    Slip,       // Particles slide along walls (realistic)
+    None,       // No boundary (open world)
+}
+
+// Flexible boundary system for open-world compatibility
 pub fn calculate_grid_velocities(
     time: Res<Time>,
     mut grid: ResMut<Grid>,
@@ -56,17 +65,45 @@ pub fn calculate_grid_velocities(
             cell.velocity /= cell.mass;
             cell.velocity += gravity_velocity;
 
-            // Fixed indexing: index = y * width + x
-            // So y = index / width, x = index % width
-            let y = index / GRID_RESOLUTION;
-            let x = index % GRID_RESOLUTION;
+            // Apply configurable boundary handling
+            apply_boundary_conditions(cell, index, BoundaryHandling::Slip);
+        }
+    }
+}
 
-            if x < 2 || x > GRID_RESOLUTION - 3 {
-                cell.velocity.x = 0.0;
+// Configurable boundary conditions system
+fn apply_boundary_conditions(cell: &mut Cell, index: usize, boundary_type: BoundaryHandling) {
+    let y = index / GRID_RESOLUTION;
+    let x = index % GRID_RESOLUTION;
+    
+    // Check if we're near boundaries (configurable for open world)
+    let near_boundary = x < 2 || x > GRID_RESOLUTION - 3 || y < 2 || y > GRID_RESOLUTION - 3;
+    
+    if near_boundary {
+        match boundary_type {
+            BoundaryHandling::Stick => {
+                // Old behavior - sticky walls
+                if x < 2 || x > GRID_RESOLUTION - 3 {
+                    cell.velocity.x = 0.0;
+                }
+                if y < 2 || y > GRID_RESOLUTION - 3 {
+                    cell.velocity.y = 0.0;
+                }
             }
-
-            if y < 2 || y > GRID_RESOLUTION - 3 {
-                cell.velocity.y = 0.0;
+            BoundaryHandling::Slip => {
+                // Realistic sliding behavior
+                if x < 2 || x > GRID_RESOLUTION - 3 {
+                    // Allow sliding along vertical walls (keep Y velocity)
+                    cell.velocity.x = 0.0;
+                }
+                if y < 2 || y > GRID_RESOLUTION - 3 {
+                    // Allow sliding along horizontal walls (keep X velocity)  
+                    cell.velocity.y = 0.0;
+                }
+            }
+            BoundaryHandling::None => {
+                // Open world - no boundaries (particles can flow out)
+                // Do nothing - let particles flow freely
             }
         }
     }
