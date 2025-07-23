@@ -8,10 +8,12 @@ pub enum MaterialType {
 
 impl MaterialType {
     // Simple helper constructors
+    #[inline(always)]
     pub fn water() -> Self {
         Self::Water { vp0: 1.0, ap: 0.0, jp: 1.0 }
     }
     
+    #[inline(always)]
     pub fn honey() -> Self {
         // TODO: Different viscosity parameters
         Self::Water { vp0: 1.0, ap: 0.0, jp: 1.0 }
@@ -30,6 +32,7 @@ impl MaterialType {
         }
     }
 
+    #[inline(always)]
     pub fn constitutive_model(&mut self) {
         match self {
             Self::Water { vp0, ap, jp } => {

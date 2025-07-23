@@ -2,6 +2,12 @@ use bevy::prelude::*;
 
 pub const GRID_RESOLUTION: usize = 128;
 
+// Safe division to prevent crashes
+#[inline(always)]
+pub fn safe_inverse(e: f32) -> f32 {
+    if e == 0.0 { 0.0 } else { 1.0 / e }
+}
+
 // Const generic version for compile-time optimization
 pub type GridArray<T> = [T; GRID_RESOLUTION * GRID_RESOLUTION];
 
@@ -41,15 +47,15 @@ pub fn calculate_grid_weights(particle_position: Vec2) -> (UVec2, [Vec2; 3]) {
     let weights = [
         Vec2::new(
             0.5 * (0.5 - cell_difference.x).powi(2),
-            0.5 * (0.5 - cell_difference.y).powi(2)
+            0.5 * (0.5 - cell_difference.y).powi(2),
         ),
         Vec2::new(
             0.75 - cell_difference.x.powi(2),
-            0.75 - cell_difference.y.powi(2)
+            0.75 - cell_difference.y.powi(2),
         ),
         Vec2::new(
             0.5 * (0.5 + cell_difference.x).powi(2),
-            0.5 * (0.5 + cell_difference.y).powi(2)
+            0.5 * (0.5 + cell_difference.y).powi(2),
         ),
     ];
 
@@ -64,17 +70,14 @@ pub fn zero_grid(mut grid: ResMut<Grid>) {
 // Boundary handling modes
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BoundaryHandling {
-    Stick,      // Particles stick to walls (old behavior)
-    Slip,       // Particles slide along walls (realistic)
-    None,       // No boundary (open world)
+    Stick, // Particles stick to walls (old behavior)
+    Slip,  // Particles slide along walls (realistic)
+    None,  // No boundary (open world)
 }
 
 // Flexible boundary system for open-world compatibility
-pub fn calculate_grid_velocities(
-    time: Res<Time>,
-    mut grid: ResMut<Grid>,
-    gravity: Vec2,
-) {
+#[inline(always)]
+pub fn calculate_grid_velocities(time: Res<Time>, mut grid: ResMut<Grid>, gravity: Vec2) {
     for (index, cell) in grid.cells.iter_mut().enumerate() {
         if cell.mass > 0.0 {
             let gravity_velocity = time.delta_secs() * gravity;
@@ -88,13 +91,14 @@ pub fn calculate_grid_velocities(
 }
 
 // Configurable boundary conditions system
+#[inline(always)]
 fn apply_boundary_conditions(cell: &mut Cell, index: usize, boundary_type: BoundaryHandling) {
     let y = index / GRID_RESOLUTION;
     let x = index % GRID_RESOLUTION;
-    
+
     // Check if we're near boundaries (configurable for open world)
     let near_boundary = x < 2 || x > GRID_RESOLUTION - 3 || y < 2 || y > GRID_RESOLUTION - 3;
-    
+
     if near_boundary {
         match boundary_type {
             BoundaryHandling::Stick => {
@@ -113,7 +117,7 @@ fn apply_boundary_conditions(cell: &mut Cell, index: usize, boundary_type: Bound
                     cell.velocity.x = 0.0;
                 }
                 if y < 2 || y > GRID_RESOLUTION - 3 {
-                    // Allow sliding along horizontal walls (keep X velocity)  
+                    // Allow sliding along horizontal walls (keep X velocity)
                     cell.velocity.y = 0.0;
                 }
             }

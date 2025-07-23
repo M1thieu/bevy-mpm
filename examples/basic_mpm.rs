@@ -23,18 +23,15 @@ fn init_particles(
     let mut rand = rand::rng();
     for x in 0..50 {
         for y in 0..100 {
+            let mut particle = Particle::zeroed(MaterialType::water());
+            particle.position = Vec2 {
+                x: 16.0 + x as f32 / 4.0,
+                y: 32.0 + y as f32 / 4.0,
+            };
+            particle.velocity = Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0));
+            
             commands.spawn((
-                Particle {
-                    position: Vec2 {
-                        x: 16.0 + x as f32 / 4.0,
-                        y: 32.0 + y as f32 / 4.0,
-                    },
-                    velocity: Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0)),
-                    mass: 1.0,
-                    affine_momentum_matrix: Mat2::ZERO,
-                    material_type: MaterialType::water(),
-                    grid_index: 0,
-                },
+                particle,
                 Mesh2d(meshes.add(Circle::new(1.0))),
                 MeshMaterial2d(materials.add(Color::hsl(210.0, 0.7, 0.3))),
                 Transform::from_xyz(0.0, 0.0, 0.0),
@@ -43,18 +40,15 @@ fn init_particles(
     }
     for x in 0..50 {
         for y in 0..100 {
+            let mut particle = Particle::zeroed(MaterialType::water());
+            particle.position = Vec2 {
+                x: 112.0 + x as f32 / 4.0,
+                y: 32.0 + y as f32 / 4.0,
+            };
+            particle.velocity = Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0));
+            
             commands.spawn((
-                Particle {
-                    position: Vec2 {
-                        x: 112.0 + x as f32 / 4.0,
-                        y: 32.0 + y as f32 / 4.0,
-                    },
-                    velocity: Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0)),
-                    mass: 1.0,
-                    affine_momentum_matrix: Mat2::ZERO,
-                    material_type: MaterialType::water(),
-                    grid_index: 0,
-                },
+                particle,
                 Mesh2d(meshes.add(Circle::new(1.0))),
                 MeshMaterial2d(materials.add(Color::hsl(210.0, 0.7, 0.3))),
                 Transform::from_xyz(0.0, 0.0, 0.0),
@@ -99,18 +93,12 @@ fn controls(
         let mut rand = rand::rng();
         let handle = meshes.add(Circle::new(1.0));
 
+        let mut particle = Particle::zeroed(MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 });
+        particle.position = Vec2 { x: 64.0, y: 64.0 };
+        particle.velocity = Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-50.0..=-20.0));
+        
         commands.spawn((
-            Particle {
-                position: Vec2 {
-                    x: 64.0,
-                    y: 64.0,
-                },
-                velocity: Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-50.0..=-20.0)),
-                mass: 1.0,
-                affine_momentum_matrix: Mat2::ZERO,
-                material_type: MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 },
-                grid_index: 0,
-            },
+            particle,
             Mesh2d(handle),
             MeshMaterial2d(materials.add(Color::hsl(0.0, 1.0, 0.5))),
             Transform::from_xyz(0.0, 0.0, 0.0),
@@ -141,7 +129,7 @@ fn update_particle_transforms(
 
 fn calculate_grid_velocities_wrapper(
     time: Res<Time>,
-    mut grid: ResMut<Grid>
+    grid: ResMut<Grid>
 ) {
     mpm2d::grid::calculate_grid_velocities(time, grid, GRAVITY);
 }

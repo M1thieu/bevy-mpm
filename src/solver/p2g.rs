@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::constants::{DYNAMIC_VISCOSITY, EOS_POWER, EOS_STIFFNESS, REST_DENSITY};
-use crate::grid::{GRID_RESOLUTION, Grid, calculate_grid_weights};
+use crate::grid::{GRID_RESOLUTION, Grid, calculate_grid_weights, safe_inverse};
 use crate::particle::Particle;
 use crate::simulation::MaterialType;
 
@@ -56,7 +56,7 @@ pub fn particle_to_grid_forces(time: Res<Time>, query: Query<&Particle>, mut gri
             }
         }
 
-        let volume = particle.mass / density;
+        let volume = particle.mass * safe_inverse(density);
 
         // Calculate stress based on material type
         let stress = match &particle.material_type {
