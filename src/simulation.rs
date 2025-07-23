@@ -33,7 +33,7 @@ impl MaterialType {
     pub fn constitutive_model(&mut self) {
         match self {
             Self::Water { vp0, ap, jp } => {
-                let djp = -constants::K_WATER * (1.0 / jp.powf(constants::GAMMA_WATER) - 1.0);
+                let djp = -constants::K_WATER * (1.0 / jp.powi(3) - 1.0);
                 *ap = djp * *vp0 * *jp;
             }
         }

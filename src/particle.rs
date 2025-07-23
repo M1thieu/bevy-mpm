@@ -25,6 +25,7 @@ impl Particle {
         }
     }
 
+    #[inline(always)]
     pub fn calculate_grid_index(&self) -> u32 {
         let grid_x = (self.position.x as u32).min(GRID_RESOLUTION as u32 - 1);
         let grid_y = (self.position.y as u32).min(GRID_RESOLUTION as u32 - 1);

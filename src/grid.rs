@@ -2,6 +2,9 @@ use bevy::prelude::*;
 
 pub const GRID_RESOLUTION: usize = 128;
 
+// Const generic version for compile-time optimization
+pub type GridArray<T> = [T; GRID_RESOLUTION * GRID_RESOLUTION];
+
 #[derive(Component, Clone)]
 pub struct Cell {
     pub velocity: Vec2,
@@ -9,6 +12,7 @@ pub struct Cell {
 }
 
 impl Cell {
+    #[inline(always)]
     pub fn zeroed() -> Self {
         Self {
             velocity: Vec2::ZERO,
@@ -16,6 +20,7 @@ impl Cell {
         }
     }
 
+    #[inline(always)]
     pub fn zero(&mut self) {
         self.velocity = Vec2::ZERO;
         self.mass = 0.0;
@@ -28,19 +33,30 @@ pub struct Grid {
 }
 
 // Calculate quadratic B-spline weights for MPM interpolation
+#[inline(always)]
 pub fn calculate_grid_weights(particle_position: Vec2) -> (UVec2, [Vec2; 3]) {
     let cell_index = particle_position.as_uvec2();
     let cell_difference = (particle_position - cell_index.as_vec2()) - 0.5;
 
     let weights = [
-        0.5 * (0.5 - cell_difference).powf(2.0),
-        0.75 - cell_difference.powf(2.0),
-        0.5 * (0.5 + cell_difference).powf(2.0),
+        Vec2::new(
+            0.5 * (0.5 - cell_difference.x).powi(2),
+            0.5 * (0.5 - cell_difference.y).powi(2)
+        ),
+        Vec2::new(
+            0.75 - cell_difference.x.powi(2),
+            0.75 - cell_difference.y.powi(2)
+        ),
+        Vec2::new(
+            0.5 * (0.5 + cell_difference.x).powi(2),
+            0.5 * (0.5 + cell_difference.y).powi(2)
+        ),
     ];
 
     (cell_index, weights)
 }
 
+#[inline(always)]
 pub fn zero_grid(mut grid: ResMut<Grid>) {
     grid.cells.iter_mut().for_each(|cell| cell.zero());
 }
