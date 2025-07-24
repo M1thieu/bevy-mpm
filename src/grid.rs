@@ -2,6 +2,13 @@ use bevy::prelude::*;
 
 pub const GRID_RESOLUTION: usize = 128;
 
+// Pre-computed neighbor offsets for 3x3 grid pattern
+pub const NEIGHBOR_OFFSETS: [i32; 9] = [
+    -(GRID_RESOLUTION as i32) - 1, -(GRID_RESOLUTION as i32), -(GRID_RESOLUTION as i32) + 1,
+    -1, 0, 1,
+    (GRID_RESOLUTION as i32) - 1, GRID_RESOLUTION as i32, (GRID_RESOLUTION as i32) + 1,
+];
+
 // Safe division to prevent crashes
 #[inline(always)]
 pub fn safe_inverse(e: f32) -> f32 {
@@ -77,6 +84,48 @@ pub fn safe_grid_index(pos: UVec2) -> Option<usize> {
     } else {
         None
     }
+}
+
+// Check if entire 3x3 neighborhood around a center index is valid (batch validation)
+#[inline(always)]
+pub fn is_neighborhood_valid(center_index: usize) -> bool {
+    for &offset in NEIGHBOR_OFFSETS.iter() {
+        let neighbor_index = center_index as i32 + offset;
+        if neighbor_index < 0 || neighbor_index >= (GRID_RESOLUTION * GRID_RESOLUTION) as i32 {
+            return false;
+        }
+        
+        // Check for grid edge wrapping
+        let center_x = center_index % GRID_RESOLUTION;
+        let center_y = center_index / GRID_RESOLUTION;
+        let neighbor_x = (neighbor_index as usize) % GRID_RESOLUTION;
+        let neighbor_y = (neighbor_index as usize) / GRID_RESOLUTION;
+        
+        if (center_x as i32 - neighbor_x as i32).abs() > 1 || 
+           (center_y as i32 - neighbor_y as i32).abs() > 1 {
+            return false;
+        }
+    }
+    true
+}
+
+// Get neighbor indices using pre-computed offsets with batch validation
+#[inline(always)]
+pub fn get_neighbor_indices(center_index: usize) -> [Option<usize>; 9] {
+    let mut neighbors = [None; 9];
+    
+    // Early exit if entire neighborhood is invalid (batch validation)
+    if !is_neighborhood_valid(center_index) {
+        return neighbors;
+    }
+    
+    // All neighbors are guaranteed valid, compute directly
+    for (i, &offset) in NEIGHBOR_OFFSETS.iter().enumerate() {
+        let neighbor_index = (center_index as i32 + offset) as usize;
+        neighbors[i] = Some(neighbor_index);
+    }
+    
+    neighbors
 }
 
 #[inline(always)]

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::constants::{DYNAMIC_VISCOSITY, EOS_POWER, EOS_STIFFNESS, REST_DENSITY};
-use crate::grid::{Grid, calculate_grid_weights, safe_inverse, safe_grid_index};
+use crate::grid::{Grid, calculate_grid_weights, safe_inverse, get_neighbor_indices};
 use crate::particle::Particle;
 use crate::simulation::MaterialType;
 use crate::solver_params::SolverParams;
@@ -13,24 +13,24 @@ pub fn particle_to_grid_mass_velocity(query: Query<&Particle>, mut grid: ResMut<
 
     for particle in particles {
         let (cell_index, weights) = calculate_grid_weights(particle.position);
+        let center_linear_index = cell_index.y as usize * 128 + cell_index.x as usize;
+        let neighbor_indices = get_neighbor_indices(center_linear_index);
 
-        for gx in 0..3 {
-            for gy in 0..3 {
+        for (neighbor_idx, &neighbor_linear_index) in neighbor_indices.iter().enumerate() {
+            if let Some(linear_index) = neighbor_linear_index {
+                let gx = neighbor_idx % 3;
+                let gy = neighbor_idx / 3;
                 let weight = weights[gx].x * weights[gy].y;
 
-                let cell_position =
-                    UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
                 let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
                 let q = particle.affine_momentum_matrix * cell_distance;
 
                 let mass_contribution = weight * particle.mass;
 
-                // Safer bounds checking with early exit
-                if let Some(linear_index) = safe_grid_index(cell_position) {
-                    if let Some(cell) = grid.cells.get_mut(linear_index) {
-                        cell.mass += mass_contribution;
-                        cell.velocity += mass_contribution * (particle.velocity + q);
-                    }
+                if let Some(cell) = grid.cells.get_mut(linear_index) {
+                    cell.mass += mass_contribution;
+                    cell.velocity += mass_contribution * (particle.velocity + q);
                 }
             }
         }
@@ -49,21 +49,19 @@ pub fn particle_to_grid_forces(
 
     for particle in particle_refs {
         let (cell_index, weights) = calculate_grid_weights(particle.position);
+        let center_linear_index = cell_index.y as usize * 128 + cell_index.x as usize;
+        let neighbor_indices = get_neighbor_indices(center_linear_index);
 
         let mut density = 0.0;
 
-        for gx in 0..3 {
-            for gy in 0..3 {
+        for (neighbor_idx, &neighbor_linear_index) in neighbor_indices.iter().enumerate() {
+            if let Some(linear_index) = neighbor_linear_index {
+                let gx = neighbor_idx % 3;
+                let gy = neighbor_idx / 3;
                 let weight = weights[gx].x * weights[gy].y;
 
-                let cell_position =
-                    UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-
-                // Safer bounds checking  
-                if let Some(linear_index) = safe_grid_index(cell_position) {
-                    if let Some(cell) = grid.cells.get(linear_index) {
-                        density += cell.mass * weight;
-                    }
+                if let Some(cell) = grid.cells.get(linear_index) {
+                    density += cell.mass * weight;
                 }
             }
         }
@@ -114,20 +112,18 @@ pub fn particle_to_grid_forces(
 
         let eq_16_term_0 = -volume * stress * time.delta_secs();
 
-        for gx in 0..3 {
-            for gy in 0..3 {
+        for (neighbor_idx, &neighbor_linear_index) in neighbor_indices.iter().enumerate() {
+            if let Some(linear_index) = neighbor_linear_index {
+                let gx = neighbor_idx % 3;
+                let gy = neighbor_idx / 3;
                 let weight = weights[gx].x * weights[gy].y;
 
-                let cell_position =
-                    UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+                let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
                 let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
 
-                // Safer bounds checking
-                if let Some(linear_index) = safe_grid_index(cell_position) {
-                    if let Some(cell) = grid.cells.get_mut(linear_index) {
-                        let momentum = eq_16_term_0 * weight * cell_distance;
-                        cell.velocity += momentum;
-                    }
+                if let Some(cell) = grid.cells.get_mut(linear_index) {
+                    let momentum = eq_16_term_0 * weight * cell_distance;
+                    cell.velocity += momentum;
                 }
             }
         }
