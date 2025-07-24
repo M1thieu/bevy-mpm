@@ -1,12 +1,13 @@
 use std::time::Duration;
 
 use bevy::prelude::*;
-use rand::Rng;
-use mpm2d::grid::{Cell, Grid, GRID_RESOLUTION};
-use mpm2d::simulation::MaterialType;
+use mpm2d::SolverParams;
 use mpm2d::constants::GRAVITY;
+use mpm2d::grid::{Cell, GRID_RESOLUTION, Grid};
 use mpm2d::particle::Particle;
-use mpm2d::solver::{particle_to_grid_mass_velocity, particle_to_grid_forces, grid_to_particle};
+use mpm2d::simulation::MaterialType;
+use mpm2d::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
+use rand::Rng;
 
 #[derive(Resource)]
 struct FrameTimer(Timer);
@@ -28,8 +29,9 @@ fn init_particles(
                 x: 16.0 + x as f32 / 4.0,
                 y: 32.0 + y as f32 / 4.0,
             };
-            particle.velocity = Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0));
-            
+            particle.velocity =
+                Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0));
+
             commands.spawn((
                 particle,
                 Mesh2d(meshes.add(Circle::new(1.0))),
@@ -45,8 +47,9 @@ fn init_particles(
                 x: 112.0 + x as f32 / 4.0,
                 y: 32.0 + y as f32 / 4.0,
             };
-            particle.velocity = Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0));
-            
+            particle.velocity =
+                Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0));
+
             commands.spawn((
                 particle,
                 Mesh2d(meshes.add(Circle::new(1.0))),
@@ -93,10 +96,13 @@ fn controls(
         let mut rand = rand::rng();
         let handle = meshes.add(Circle::new(1.0));
 
-        let mut particle = Particle::zeroed(MaterialType::Water { vp0: 1.0, ap: 0.0, jp: 1.0 });
+        let mut particle = Particle::zeroed(MaterialType::water());
         particle.position = Vec2 { x: 64.0, y: 64.0 };
-        particle.velocity = Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-50.0..=-20.0));
-        
+        particle.velocity = Vec2::new(
+            rand.random_range(-10.0..=10.0),
+            rand.random_range(-50.0..=-20.0),
+        );
+
         commands.spawn((
             particle,
             Mesh2d(handle),
@@ -115,22 +121,19 @@ fn controls(
             projection2d.scale *= 0.25f32.powf(time.delta_secs());
         }
     }
-
 }
 
-fn update_particle_transforms(
-    mut query: Query<(&mut Transform, &Particle)>,
-) {
-    query.par_iter_mut()
-        .for_each(|(mut transform, particle)| {
-            transform.translation = Vec3::new((particle.position.x - 64.0) * 4.0, (particle.position.y - 64.0) * 4.0, 0.0);
-        });
+fn update_particle_transforms(mut query: Query<(&mut Transform, &Particle)>) {
+    query.par_iter_mut().for_each(|(mut transform, particle)| {
+        transform.translation = Vec3::new(
+            (particle.position.x - 64.0) * 4.0,
+            (particle.position.y - 64.0) * 4.0,
+            0.0,
+        );
+    });
 }
 
-fn calculate_grid_velocities_wrapper(
-    time: Res<Time>,
-    grid: ResMut<Grid>
-) {
+fn calculate_grid_velocities_wrapper(time: Res<Time>, grid: ResMut<Grid>) {
     mpm2d::grid::calculate_grid_velocities(time, grid, GRAVITY);
 }
 
@@ -139,7 +142,10 @@ pub struct MpmPlugin;
 impl Plugin for MpmPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Grid { cells: Vec::new() });
-        app.insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(1.0 / 60.0)));
+        app.insert_resource(SolverParams::default());
+        app.insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(
+            1.0 / 60.0,
+        )));
         app.add_systems(Startup, (init_grid, init_particles).chain());
         app.add_systems(
             FixedUpdate,

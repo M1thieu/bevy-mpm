@@ -24,7 +24,7 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
                     cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
 
                 let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
-                
+
                 if let Some(cell) = grid.cells.get(cell_index) {
                     let weighted_velocity = cell.velocity * weight;
 

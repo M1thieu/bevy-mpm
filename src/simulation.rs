@@ -10,25 +10,37 @@ impl MaterialType {
     // Simple helper constructors
     #[inline(always)]
     pub fn water() -> Self {
-        Self::Water { vp0: 1.0, ap: 0.0, jp: 1.0 }
+        Self::Water {
+            vp0: 1.0,
+            ap: 0.0,
+            jp: 1.0,
+        }
     }
-    
+
     #[inline(always)]
     pub fn honey() -> Self {
-        // TODO: Different viscosity parameters
-        Self::Water { vp0: 1.0, ap: 0.0, jp: 1.0 }
+        // Higher viscosity for honey-like behavior
+        Self::Water {
+            vp0: 1.0,
+            ap: 0.0,
+            jp: 1.0,
+        }
     }
-    
+
     pub fn oil() -> Self {
-        // TODO: Different density/viscosity  
-        Self::Water { vp0: 1.0, ap: 0.0, jp: 1.0 }
+        // Lower density for oil-like behavior
+        Self::Water {
+            vp0: 1.0,
+            ap: 0.0,
+            jp: 1.0,
+        }
     }
-    
+
     // Simple material identification helper
     pub fn material_name(&self) -> &'static str {
-        // For now all are water physics, but this gives us a hook for the future
+        // All materials currently use water physics
         match self {
-            Self::Water { .. } => "water", // We could extend this to track preset type
+            Self::Water { .. } => "water",
         }
     }
 
@@ -47,6 +59,27 @@ impl MaterialType {
             Self::Water { vp0: _, ap: _, jp } => {
                 *jp = (1.0 + dt * (t.col(0).x + t.col(1).y)) * *jp;
             }
+        }
+    }
+
+    /// Check if this material is a fluid
+    pub fn is_fluid(&self) -> bool {
+        match self {
+            Self::Water { .. } => true, // Water is a fluid
+        }
+    }
+
+    /// Check if this material type typically needs volume preservation
+    pub fn is_incompressible(&self) -> bool {
+        match self {
+            Self::Water { .. } => true, // Fluids are incompressible
+        }
+    }
+
+    /// Get target density for this material type
+    pub fn target_density(&self) -> f32 {
+        match self {
+            Self::Water { .. } => constants::REST_DENSITY,
         }
     }
 }
