@@ -62,6 +62,23 @@ pub fn calculate_grid_weights(particle_position: Vec2) -> (UVec2, [Vec2; 3]) {
     (cell_index, weights)
 }
 
+
+// Bounds checking with early exit
+#[inline(always)]
+pub fn is_valid_grid_position(pos: UVec2) -> bool {
+    pos.x < GRID_RESOLUTION as u32 && pos.y < GRID_RESOLUTION as u32
+}
+
+// Fast grid index calculation with bounds check
+#[inline(always)]
+pub fn safe_grid_index(pos: UVec2) -> Option<usize> {
+    if is_valid_grid_position(pos) {
+        Some(pos.y as usize * GRID_RESOLUTION + pos.x as usize)
+    } else {
+        None
+    }
+}
+
 #[inline(always)]
 pub fn zero_grid(mut grid: ResMut<Grid>) {
     grid.cells.iter_mut().for_each(|cell| cell.zero());

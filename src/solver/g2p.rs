@@ -1,11 +1,15 @@
 use bevy::prelude::*;
 
-use crate::grid::{GRID_RESOLUTION, Grid, calculate_grid_weights};
+use crate::grid::{GRID_RESOLUTION, Grid, calculate_grid_weights, safe_grid_index};
 use crate::particle::Particle;
 
 /// Implements proper affine matrix update using outer product
 pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: Res<Grid>) {
-    query.par_iter_mut().for_each(|mut particle| {
+    // Sort particles by grid cell for better cache performance
+    let mut particles: Vec<_> = query.iter_mut().collect();
+    particles.sort_by_key(|particle| particle.grid_index);
+
+    for mut particle in particles {
         particle.velocity = Vec2::ZERO;
 
         let (cell_index, weights) = calculate_grid_weights(particle.position);
@@ -19,13 +23,11 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
                 let cell_position =
                     UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
 
-                // Fixed indexing: y * width + x for row-major order
-                let cell_index =
-                    cell_position.y as usize * GRID_RESOLUTION + cell_position.x as usize;
-
                 let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
-
-                if let Some(cell) = grid.cells.get(cell_index) {
+                
+                // Safer bounds checking
+                if let Some(linear_index) = safe_grid_index(cell_position) {
+                    if let Some(cell) = grid.cells.get(linear_index) {
                     let weighted_velocity = cell.velocity * weight;
 
                     let term = Mat2::from_cols(
@@ -39,8 +41,9 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
                         ),
                     );
 
-                    b += term;
-                    particle.velocity += weighted_velocity;
+                        b += term;
+                        particle.velocity += weighted_velocity;
+                    }
                 }
             }
         }
@@ -55,5 +58,5 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
         particle.position = particle
             .position
             .clamp(Vec2::splat(1.0), Vec2::splat(GRID_RESOLUTION as f32 - 2.0));
-    });
+    }
 }
