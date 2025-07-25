@@ -45,25 +45,31 @@ pub struct Grid {
     pub cells: Vec<Cell>,
 }
 
+// Fast B-spline weight calculation using optimized math
+#[inline(always)]
+fn calculate_bspline_weight(d: f32) -> [f32; 3] {
+    let d2 = d * d;
+    
+    [
+        0.5 * (0.5 - d) * (0.5 - d),  // Faster than powi(2)
+        0.75 - d2,
+        0.5 * (0.5 + d) * (0.5 + d),
+    ]
+}
+
 // Calculate quadratic B-spline weights for MPM interpolation
 #[inline(always)]
 pub fn calculate_grid_weights(particle_position: Vec2) -> (UVec2, [Vec2; 3]) {
     let cell_index = particle_position.as_uvec2();
     let cell_difference = (particle_position - cell_index.as_vec2()) - 0.5;
 
+    let x_weights = calculate_bspline_weight(cell_difference.x);
+    let y_weights = calculate_bspline_weight(cell_difference.y);
+
     let weights = [
-        Vec2::new(
-            0.5 * (0.5 - cell_difference.x).powi(2),
-            0.5 * (0.5 - cell_difference.y).powi(2),
-        ),
-        Vec2::new(
-            0.75 - cell_difference.x.powi(2),
-            0.75 - cell_difference.y.powi(2),
-        ),
-        Vec2::new(
-            0.5 * (0.5 + cell_difference.x).powi(2),
-            0.5 * (0.5 + cell_difference.y).powi(2),
-        ),
+        Vec2::new(x_weights[0], y_weights[0]),
+        Vec2::new(x_weights[1], y_weights[1]),
+        Vec2::new(x_weights[2], y_weights[2]),
     ];
 
     (cell_index, weights)

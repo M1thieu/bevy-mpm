@@ -16,6 +16,15 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
         let center_linear_index = cell_index.y as usize * 128 + cell_index.x as usize;
         let neighbor_indices = get_neighbor_indices(center_linear_index);
 
+        // Pre-compute cell distances (cache optimization)
+        let mut cell_distances = [Vec2::ZERO; 9];
+        for neighbor_idx in 0..9 {
+            let gx = neighbor_idx % 3;
+            let gy = neighbor_idx / 3;
+            let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+            cell_distances[neighbor_idx] = (cell_position.as_vec2() - particle.position) + 0.5;
+        }
+
         let mut b = Mat2::ZERO;
 
         for (neighbor_idx, &neighbor_linear_index) in neighbor_indices.iter().enumerate() {
@@ -24,8 +33,7 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
                 let gy = neighbor_idx / 3;
                 let weight = weights[gx].x * weights[gy].y;
 
-                let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-                let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
+                let cell_distance = cell_distances[neighbor_idx];  // Use pre-computed distance
                 
                 if let Some(cell) = grid.cells.get(linear_index) {
                     let weighted_velocity = cell.velocity * weight;
