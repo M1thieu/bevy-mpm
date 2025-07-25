@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::grid::{GRID_RESOLUTION, Grid, calculate_grid_weights, get_neighbor_indices};
+use crate::grid::{GRID_RESOLUTION, NEIGHBOR_COUNT, KERNEL_SIZE, Grid, calculate_grid_weights, get_neighbor_indices};
 use crate::particle::Particle;
 
 /// Implements proper affine matrix update using outer product
@@ -13,14 +13,14 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
         particle.velocity = Vec2::ZERO;
 
         let (cell_index, weights) = calculate_grid_weights(particle.position);
-        let center_linear_index = cell_index.y as usize * 128 + cell_index.x as usize;
+        let center_linear_index = cell_index.y as usize * GRID_RESOLUTION + cell_index.x as usize;
         let neighbor_indices = get_neighbor_indices(center_linear_index);
 
         // Pre-compute cell distances (cache optimization)
-        let mut cell_distances = [Vec2::ZERO; 9];
-        for neighbor_idx in 0..9 {
-            let gx = neighbor_idx % 3;
-            let gy = neighbor_idx / 3;
+        let mut cell_distances = [Vec2::ZERO; NEIGHBOR_COUNT];
+        for neighbor_idx in 0..NEIGHBOR_COUNT {
+            let gx = neighbor_idx % KERNEL_SIZE;
+            let gy = neighbor_idx / KERNEL_SIZE;
             let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
             cell_distances[neighbor_idx] = (cell_position.as_vec2() - particle.position) + 0.5;
         }

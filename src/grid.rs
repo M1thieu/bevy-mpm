@@ -1,12 +1,17 @@
 use bevy::prelude::*;
 
+/// Grid dimensions (128x128 cells)
 pub const GRID_RESOLUTION: usize = 128;
+/// Number of neighbors in 3x3 kernel
+pub const NEIGHBOR_COUNT: usize = 9;
+/// MPM kernel size (3x3 B-spline)
+pub const KERNEL_SIZE: usize = 3;
 
-// Pre-computed neighbor offsets for 3x3 grid pattern
-pub const NEIGHBOR_OFFSETS: [i32; 9] = [
-    -(GRID_RESOLUTION as i32) - 1, -(GRID_RESOLUTION as i32), -(GRID_RESOLUTION as i32) + 1,
-    -1, 0, 1,
-    (GRID_RESOLUTION as i32) - 1, GRID_RESOLUTION as i32, (GRID_RESOLUTION as i32) + 1,
+// Pre-computed neighbor offsets for 3x3 grid pattern (performance optimization)
+pub const NEIGHBOR_OFFSETS: [i32; NEIGHBOR_COUNT] = [
+    -(GRID_RESOLUTION as i32) - 1, -(GRID_RESOLUTION as i32), -(GRID_RESOLUTION as i32) + 1, // Top row
+    -1, 0, 1,                                                                                  // Middle row  
+    (GRID_RESOLUTION as i32) - 1, GRID_RESOLUTION as i32, (GRID_RESOLUTION as i32) + 1,       // Bottom row
 ];
 
 // Safe division to prevent crashes
@@ -117,8 +122,8 @@ pub fn is_neighborhood_valid(center_index: usize) -> bool {
 
 // Get neighbor indices using pre-computed offsets with batch validation
 #[inline(always)]
-pub fn get_neighbor_indices(center_index: usize) -> [Option<usize>; 9] {
-    let mut neighbors = [None; 9];
+pub fn get_neighbor_indices(center_index: usize) -> [Option<usize>; NEIGHBOR_COUNT] {
+    let mut neighbors = [None; NEIGHBOR_COUNT];
     
     // Early exit if entire neighborhood is invalid (batch validation)
     if !is_neighborhood_valid(center_index) {

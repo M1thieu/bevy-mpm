@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::constants::{DYNAMIC_VISCOSITY, EOS_POWER, EOS_STIFFNESS, REST_DENSITY};
-use crate::grid::{Grid, calculate_grid_weights, safe_inverse, get_neighbor_indices};
+use crate::grid::{GRID_RESOLUTION, NEIGHBOR_COUNT, KERNEL_SIZE, Grid, calculate_grid_weights, safe_inverse, get_neighbor_indices};
 use crate::particle::Particle;
 use crate::simulation::MaterialType;
 use crate::solver_params::SolverParams;
@@ -13,16 +13,16 @@ pub fn particle_to_grid_mass_velocity(query: Query<&Particle>, mut grid: ResMut<
 
     for particle in particles {
         let (cell_index, weights) = calculate_grid_weights(particle.position);
-        let center_linear_index = cell_index.y as usize * 128 + cell_index.x as usize;
+        let center_linear_index = cell_index.y as usize * GRID_RESOLUTION + cell_index.x as usize;
         let neighbor_indices = get_neighbor_indices(center_linear_index);
 
         // Pre-compute cell positions and distances for all neighbors (cache optimization)
-        let mut cell_positions = [UVec2::ZERO; 9];
-        let mut cell_distances = [Vec2::ZERO; 9];
+        let mut cell_positions = [UVec2::ZERO; NEIGHBOR_COUNT];
+        let mut cell_distances = [Vec2::ZERO; NEIGHBOR_COUNT];
         
-        for neighbor_idx in 0..9 {
-            let gx = neighbor_idx % 3;
-            let gy = neighbor_idx / 3;
+        for neighbor_idx in 0..NEIGHBOR_COUNT {
+            let gx = neighbor_idx % KERNEL_SIZE;
+            let gy = neighbor_idx / KERNEL_SIZE;
             cell_positions[neighbor_idx] = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
             cell_distances[neighbor_idx] = (cell_positions[neighbor_idx].as_vec2() - particle.position) + 0.5;
         }
@@ -59,14 +59,14 @@ pub fn particle_to_grid_forces(
 
     for particle in particle_refs {
         let (cell_index, weights) = calculate_grid_weights(particle.position);
-        let center_linear_index = cell_index.y as usize * 128 + cell_index.x as usize;
+        let center_linear_index = cell_index.y as usize * GRID_RESOLUTION + cell_index.x as usize;
         let neighbor_indices = get_neighbor_indices(center_linear_index);
 
         // Pre-compute cell distances for reuse in both loops (cache optimization)
-        let mut cell_distances = [Vec2::ZERO; 9];
-        for neighbor_idx in 0..9 {
-            let gx = neighbor_idx % 3;
-            let gy = neighbor_idx / 3;
+        let mut cell_distances = [Vec2::ZERO; NEIGHBOR_COUNT];
+        for neighbor_idx in 0..NEIGHBOR_COUNT {
+            let gx = neighbor_idx % KERNEL_SIZE;
+            let gy = neighbor_idx / KERNEL_SIZE;
             let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
             cell_distances[neighbor_idx] = (cell_position.as_vec2() - particle.position) + 0.5;
         }
