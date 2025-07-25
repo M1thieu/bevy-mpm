@@ -12,6 +12,9 @@ pub struct Particle {
     pub material_type: MaterialType,
     pub grid_index: u32,
 
+    // Deformation tracking for future material models
+    pub deformation_gradient: Mat2, // F matrix - tracks material deformation
+
     // Particle health system
     pub failed: bool,          // Mark particle for removal
     pub condition_number: f32, // Numerical stability measure
@@ -29,6 +32,7 @@ impl Particle {
             affine_momentum_matrix: Mat2::ZERO,
             material_type,
             grid_index: 0,
+            deformation_gradient: Mat2::IDENTITY, // Start with no deformation
             failed: false,
             condition_number: 1.0,
             volume0: 1.0, // Default unit volume
@@ -45,6 +49,7 @@ impl Particle {
             affine_momentum_matrix: Mat2::ZERO,
             material_type: MaterialType::water(),
             grid_index: 0,
+            deformation_gradient: Mat2::IDENTITY, // Start with no deformation
             failed: false,
             condition_number: 1.0,
             volume0: volume,
