@@ -86,6 +86,21 @@ impl Particle {
         }
     }
 
+    /// Get current volume based on deformation gradient determinant
+    /// J = det(F) represents volume change ratio
+    #[inline(always)]
+    pub fn current_volume_from_deformation(&self) -> f32 {
+        let jacobian = self.deformation_gradient.determinant();
+        self.volume0 * jacobian.abs()
+    }
+
+    /// Get deformation gradient determinant (Jacobian)
+    /// J = det(F) - represents volume change (1.0 = no change, >1.0 = expansion, <1.0 = compression)
+    #[inline(always)]
+    pub fn jacobian(&self) -> f32 {
+        self.deformation_gradient.determinant()
+    }
+
     #[inline(always)]
     pub fn calculate_grid_index(&self) -> u32 {
         let grid_x = (self.position.x as u32).min(GRID_RESOLUTION as u32 - 1);
