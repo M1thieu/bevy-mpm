@@ -1,3 +1,8 @@
+//! Grid-to-Particle (G2P) transfer operations
+//! 
+//! Transfers velocities and velocity gradients from grid nodes back to particles.
+//! Updates particle positions and deformation state.
+
 use bevy::prelude::*;
 
 use crate::grid::{GRID_RESOLUTION, NEIGHBOR_COUNT, KERNEL_SIZE, Grid, calculate_grid_weights, get_neighbor_indices};

@@ -1,3 +1,8 @@
+//! Grid system for MPM simulation
+//! 
+//! Manages the background Eulerian grid including cell data, interpolation weights,
+//! and neighbor calculations for quadratic B-spline kernels.
+
 use bevy::prelude::*;
 
 /// Grid dimensions (128x128 cells)
@@ -14,11 +19,6 @@ pub const NEIGHBOR_OFFSETS: [i32; NEIGHBOR_COUNT] = [
     (GRID_RESOLUTION as i32) - 1, GRID_RESOLUTION as i32, (GRID_RESOLUTION as i32) + 1,       // Bottom row
 ];
 
-// Safe division to prevent crashes
-#[inline(always)]
-pub fn safe_inverse(e: f32) -> f32 {
-    if e == 0.0 { 0.0 } else { 1.0 / e }
-}
 
 // Const generic version for compile-time optimization
 pub type GridArray<T> = [T; GRID_RESOLUTION * GRID_RESOLUTION];

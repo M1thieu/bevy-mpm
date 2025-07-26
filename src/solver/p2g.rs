@@ -1,7 +1,13 @@
+//! Particle-to-Grid (P2G) transfer operations
+//! 
+//! Transfers mass, momentum, and forces from particles to grid nodes.
+//! Includes stress calculation and APIC momentum transfer.
+
 use bevy::prelude::*;
 
-use crate::constants::{DYNAMIC_VISCOSITY, EOS_POWER, EOS_STIFFNESS, REST_DENSITY};
-use crate::grid::{GRID_RESOLUTION, NEIGHBOR_COUNT, KERNEL_SIZE, Grid, calculate_grid_weights, safe_inverse, get_neighbor_indices};
+use crate::grid::{GRID_RESOLUTION, NEIGHBOR_COUNT, KERNEL_SIZE, Grid, calculate_grid_weights, get_neighbor_indices};
+use crate::materials::utils;
+use crate::materials;
 use crate::particle::Particle;
 use crate::simulation::MaterialType;
 use crate::solver_params::SolverParams;
@@ -85,47 +91,18 @@ pub fn particle_to_grid_forces(
             }
         }
 
-        let volume = particle.mass * safe_inverse(density);
+        let volume = particle.mass * utils::safe_inverse(density);
 
         // Calculate stress based on material type
         let stress = match &particle.material_type {
-            MaterialType::Water {
-                vp0: _,
-                ap: _,
-                jp: _,
-            } => {
-                // Original EOS pressure
-                let eos_pressure = f32::max(
-                    -0.1,
-                    EOS_STIFFNESS * ((density / REST_DENSITY).powi(EOS_POWER as i32) - 1.0),
-                );
-
-                // Volume preservation correction (parameter-driven)
-                let volume_correction =
-                    if solver_params.preserve_fluid_volume && particle.material_type.is_fluid() {
-                        // Simple volume deviation correction
-                        let current_volume = volume;
-                        let target_volume = particle.volume0;
-                        let volume_deviation = (current_volume - target_volume) / target_volume;
-
-                        // Apply correction proportional to deviation
-                        solver_params.volume_correction_strength * volume_deviation * REST_DENSITY
-                    } else {
-                        0.0
-                    };
-
-                // Combined pressure (EOS + volume preservation)
-                let total_pressure = eos_pressure + volume_correction;
-                let stress = Mat2::IDENTITY * -total_pressure;
-
-                let dudv = particle.affine_momentum_matrix;
-                let mut strain = dudv;
-                let trace = strain.col(1).x + strain.col(0).y;
-                strain.col_mut(0).y = trace;
-                strain.col_mut(1).x = trace;
-                let viscosity_term = DYNAMIC_VISCOSITY * strain;
-
-                stress + viscosity_term
+            MaterialType::Water { .. } => {
+                // Use organized water material function
+                materials::fluid::water::calculate_stress(
+                    &particle,
+                    density,
+                    solver_params.volume_correction_strength,
+                    solver_params.preserve_fluid_volume && particle.material_type.is_fluid(),
+                )
             }
         };
 

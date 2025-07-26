@@ -1,6 +1,11 @@
+//! Material simulation and constitutive models
+//! 
+//! Defines material types and their behaviors including deformation updates,
+//! stress calculations, and material property queries.
+
 use bevy::prelude::*;
 
-use crate::constants;
+use crate::materials;
 
 pub enum MaterialType {
     Water { vp0: f32, ap: f32, jp: f32 },
@@ -36,9 +41,9 @@ impl MaterialType {
         }
     }
 
+
     // Simple material identification helper
     pub fn material_name(&self) -> &'static str {
-        // All materials currently use water physics
         match self {
             Self::Water { .. } => "water",
         }
@@ -48,8 +53,8 @@ impl MaterialType {
     pub fn constitutive_model(&mut self) {
         match self {
             Self::Water { vp0, ap, jp } => {
-                let djp = -constants::K_WATER * (1.0 / jp.powi(3) - 1.0);
-                *ap = djp * *vp0 * *jp;
+                // Use water material function (organized logic)
+                *ap = materials::fluid::water::apply_constitutive_model(*vp0, *jp);
             }
         }
     }
@@ -57,7 +62,8 @@ impl MaterialType {
     pub fn update_deformation(&mut self, t: Mat2, dt: f32) {
         match self {
             Self::Water { vp0: _, ap: _, jp } => {
-                *jp = (1.0 + dt * (t.col(0).x + t.col(1).y)) * *jp;
+                // Use water material function (organized logic)
+                materials::fluid::water::update_deformation(jp, t, dt);
             }
         }
     }
@@ -65,21 +71,21 @@ impl MaterialType {
     /// Check if this material is a fluid
     pub fn is_fluid(&self) -> bool {
         match self {
-            Self::Water { .. } => true, // Water is a fluid
+            Self::Water { .. } => materials::fluid::water::is_fluid(),
         }
     }
 
     /// Check if this material type typically needs volume preservation
     pub fn is_incompressible(&self) -> bool {
         match self {
-            Self::Water { .. } => true, // Fluids are incompressible
+            Self::Water { .. } => materials::fluid::water::is_incompressible(),
         }
     }
 
     /// Get target density for this material type
     pub fn target_density(&self) -> f32 {
         match self {
-            Self::Water { .. } => constants::REST_DENSITY,
+            Self::Water { .. } => materials::fluid::water::target_density(),
         }
     }
 }

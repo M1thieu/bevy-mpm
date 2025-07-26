@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 pub mod constants;
 pub mod grid;
+pub mod materials;
 pub mod particle;
 pub mod simulation;
 pub mod solver;

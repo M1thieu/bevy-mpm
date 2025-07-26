@@ -1,3 +1,8 @@
+//! Particle system for MPM simulation
+//! 
+//! Handles particle properties, lifecycle management, and grid indexing.
+//! Each particle carries material state and tracks its health for cleanup.
+
 use bevy::prelude::*;
 
 use crate::grid::GRID_RESOLUTION;
