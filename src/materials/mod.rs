@@ -1,21 +1,19 @@
-//! Material system for MPM simulation
+//! Materials for MPM simulation
 //! 
-//! Materials are organized into three main categories based on how they behave physically.
-//! This makes it easy to find what you need and add new materials without breaking existing code.
-//!
-//! # Categories
+//! Three categories:
 //! 
-//! * `fluid` - Materials that flow like water, oil, or honey
-//! * `solid` - Materials that hold their shape like rubber or metal  
-//! * `granular` - Materials like sand that can flow but also pile up
-//!
-//! Each category has its own folder with all the related materials inside.
+//! * `fluid` - Water and other fluids
+//! * `solid` - Elastic materials (coming soon)  
+//! * `granular` - Sand-like materials (coming soon)
 
-
+pub mod material_types;
 pub mod fluid;
 pub mod solid;  
 pub mod granular;
 pub mod utils;
+
+// Re-export the main material type for convenience
+pub use material_types::MaterialType;
 
 /// Basic properties that all materials have
 #[derive(Debug, Clone, Copy)]

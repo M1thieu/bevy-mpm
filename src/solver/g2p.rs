@@ -5,8 +5,8 @@
 
 use bevy::prelude::*;
 
-use crate::grid::{GRID_RESOLUTION, NEIGHBOR_COUNT, KERNEL_SIZE, Grid, calculate_grid_weights, get_neighbor_indices};
-use crate::particle::Particle;
+use crate::core::{GRID_RESOLUTION, NEIGHBOR_COUNT, KERNEL_SIZE, Grid, calculate_grid_weights, get_neighbor_indices};
+use crate::core::Particle;
 
 /// Implements proper affine matrix update using outer product
 pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: Res<Grid>) {

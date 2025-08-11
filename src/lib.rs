@@ -1,22 +1,28 @@
+//! Material Point Method simulation for Bevy
+//! 
+//! MPM physics simulation supporting fluids and solids.
+//!
+//! ```rust
+//! use bevy::prelude::*;
+//! use mpm2d::MpmPlugin;
+//!
+//! App::new().add_plugins((DefaultPlugins, MpmPlugin)).run();
+//! ```
+
 use bevy::prelude::*;
 
-pub mod constants;
-pub mod grid;
+pub mod config;
+pub mod core;
 pub mod materials;
-pub mod particle;
-pub mod simulation;
 pub mod solver;
-pub mod solver_params;
 
-// Public re-exports for clean API
-pub use grid::{Cell, GRID_RESOLUTION, Grid};
-pub use particle::Particle;
-pub use simulation::MaterialType;
-pub use solver_params::SolverParams;
+// Clean public API - everything you need to get started
+pub use config::{SolverParams, GRAVITY};
+pub use core::{Cell, GRID_RESOLUTION, Grid, Particle};
+pub use materials::MaterialType;
 
-use crate::constants::GRAVITY;
-use crate::grid::{calculate_grid_velocities, zero_grid};
-use crate::particle::{
+use crate::core::{calculate_grid_velocities, zero_grid};
+use crate::core::{
     cleanup_failed_particles, update_particle_grid_indices, update_particle_health,
 };
 use crate::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};

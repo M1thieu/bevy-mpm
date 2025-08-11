@@ -5,12 +5,12 @@
 
 use bevy::prelude::*;
 
-use crate::grid::{GRID_RESOLUTION, NEIGHBOR_COUNT, KERNEL_SIZE, Grid, calculate_grid_weights, get_neighbor_indices};
+use crate::core::{GRID_RESOLUTION, NEIGHBOR_COUNT, KERNEL_SIZE, Grid, calculate_grid_weights, get_neighbor_indices};
 use crate::materials::utils;
 use crate::materials;
-use crate::particle::Particle;
-use crate::simulation::MaterialType;
-use crate::solver_params::SolverParams;
+use crate::core::Particle;
+use crate::materials::MaterialType;
+use crate::config::SolverParams;
 
 pub fn particle_to_grid_mass_velocity(query: Query<&Particle>, mut grid: ResMut<Grid>) {
     // Sort particles by grid cell for better cache performance

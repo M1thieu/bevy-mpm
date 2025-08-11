@@ -1,12 +1,10 @@
-//! Water and other fluid materials
-//! 
-//! This handles how water behaves in the simulation including pressure, 
-//! viscosity, and volume changes. You can also create variations like 
-//! honey (thicker) or oil (less dense).
+//! Water fluid material
+//!
+//! Handles water pressure, viscosity, and EOS calculations.
 
 use bevy::prelude::*;
-use crate::particle::Particle;
-use crate::constants::{DYNAMIC_VISCOSITY, EOS_POWER, EOS_STIFFNESS, REST_DENSITY, K_WATER};
+use crate::core::Particle;
+use crate::config::{DYNAMIC_VISCOSITY, EOS_POWER, EOS_STIFFNESS, REST_DENSITY, K_WATER};
 use crate::materials::utils;
 
 /// Calculate constitutive model for water (original logic from simulation.rs)
@@ -61,12 +59,10 @@ pub fn calculate_stress(
 }
 
 pub mod types {
-    use crate::constants::REST_DENSITY;
+    use crate::config::REST_DENSITY;
     use crate::materials::MaterialProperties;
     
     pub const WATER: MaterialProperties = MaterialProperties::fluid("water", REST_DENSITY);
-    pub const HONEY: MaterialProperties = MaterialProperties::fluid("honey", REST_DENSITY * 1.4);
-    pub const OIL: MaterialProperties = MaterialProperties::fluid("oil", REST_DENSITY * 0.8);
 }
 
 /// Check if water material properties

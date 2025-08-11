@@ -1,7 +1,6 @@
-//! Simple elastic material placeholder
-//! 
-//! Future implementation of simple volume-based elasticity (easier than Neo-Hookean)
-//! Will use the mpm88.py approach: stress = -4 * E * (J - 1) / dx²
+//! Elastic material (placeholder)
+//!
+//! Future elastic solid implementation.
 
 // Placeholder for future simple elastic material implementation
 // Will use volume-only tracking like mpm88.py approach

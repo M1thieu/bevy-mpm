@@ -1,7 +1,6 @@
-//! Sand/granular material placeholder
-//! 
-//! Future implementation of Drucker-Prager plasticity for sand simulation.
-//! Will combine linear elasticity with yield surface for realistic granular flow.
+//! Sand material (placeholder)
+//!
+//! Future sand implementation.
 
 // Placeholder for future sand material implementation
 // Will use Drucker-Prager plasticity model like Sparkl

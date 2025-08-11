@@ -1,12 +1,11 @@
-//! Particle system for MPM simulation
-//! 
-//! Handles particle properties, lifecycle management, and grid indexing.
-//! Each particle carries material state and tracks its health for cleanup.
+//! Material particles for MPM simulation
+//!
+//! Particles carry position, velocity, mass and material properties.
 
 use bevy::prelude::*;
 
-use crate::grid::GRID_RESOLUTION;
-use crate::simulation::MaterialType;
+use crate::core::GRID_RESOLUTION;
+use crate::materials::MaterialType;
 
 #[derive(Component)]
 pub struct Particle {

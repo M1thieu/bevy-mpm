@@ -1,7 +1,6 @@
-//! Grid system for MPM simulation
-//! 
-//! Manages the background Eulerian grid including cell data, interpolation weights,
-//! and neighbor calculations for quadratic B-spline kernels.
+//! Background grid for MPM simulation
+//!
+//! 128x128 grid with 3x3 B-spline interpolation.
 
 use bevy::prelude::*;
 

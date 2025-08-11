@@ -1,16 +1,11 @@
 use std::time::Duration;
 
 use bevy::prelude::*;
-use mpm2d::SolverParams;
-use mpm2d::constants::GRAVITY;
-use mpm2d::grid::{Cell, GRID_RESOLUTION, Grid};
-use mpm2d::particle::Particle;
-use mpm2d::simulation::MaterialType;
+use mpm2d::{SolverParams, GRAVITY, Cell, GRID_RESOLUTION, Grid, Particle, MaterialType};
 use mpm2d::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
+use mpm2d::core::{calculate_grid_velocities, zero_grid};
 use rand::Rng;
 
-#[derive(Resource)]
-struct FrameTimer(Timer);
 
 fn init_grid(mut grid: ResMut<Grid>) {
     grid.cells = vec![Cell::zeroed(); GRID_RESOLUTION * GRID_RESOLUTION];
@@ -134,7 +129,7 @@ fn update_particle_transforms(mut query: Query<(&mut Transform, &Particle)>) {
 }
 
 fn calculate_grid_velocities_wrapper(time: Res<Time>, grid: ResMut<Grid>) {
-    mpm2d::grid::calculate_grid_velocities(time, grid, GRAVITY);
+    calculate_grid_velocities(time, grid, GRAVITY);
 }
 
 pub struct MpmPlugin;
@@ -150,7 +145,7 @@ impl Plugin for MpmPlugin {
         app.add_systems(
             FixedUpdate,
             (
-                mpm2d::grid::zero_grid,
+                zero_grid,
                 particle_to_grid_mass_velocity,
                 particle_to_grid_forces,
                 calculate_grid_velocities_wrapper,
