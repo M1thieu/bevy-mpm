@@ -1,7 +1,7 @@
 //! Material types for simulation
 
-use bevy::prelude::*;
 use crate::materials;
+use bevy::prelude::*;
 
 #[derive(Component, Debug, Clone)]
 pub enum MaterialType {
@@ -10,7 +10,11 @@ pub enum MaterialType {
 
 impl MaterialType {
     pub fn water() -> Self {
-        Self::Water { vp0: 1.0, ap: 0.0, jp: 1.0 }
+        Self::Water {
+            vp0: 1.0,
+            ap: 0.0,
+            jp: 1.0,
+        }
     }
 
     pub fn is_fluid(&self) -> bool {

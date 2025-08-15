@@ -1,12 +1,15 @@
 //! Grid-to-Particle (G2P) transfer operations
-//! 
+//!
 //! Transfers velocities and velocity gradients from grid nodes back to particles.
 //! Updates particle positions and deformation state.
 
 use bevy::prelude::*;
 
-use crate::core::{GRID_RESOLUTION, NEIGHBOR_COUNT, KERNEL_SIZE, Grid, calculate_grid_weights, get_neighbor_indices};
 use crate::core::Particle;
+use crate::core::{
+    GRID_RESOLUTION, Grid, KERNEL_SIZE, NEIGHBOR_COUNT, calculate_grid_weights,
+    get_neighbor_indices,
+};
 
 /// Implements proper affine matrix update using outer product
 pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: Res<Grid>) {
@@ -26,7 +29,8 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
         for neighbor_idx in 0..NEIGHBOR_COUNT {
             let gx = neighbor_idx % KERNEL_SIZE;
             let gy = neighbor_idx / KERNEL_SIZE;
-            let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+            let cell_position =
+                UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
             cell_distances[neighbor_idx] = (cell_position.as_vec2() - particle.position) + 0.5;
         }
 
@@ -38,8 +42,8 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
                 let gy = neighbor_idx / 3;
                 let weight = weights[gx].x * weights[gy].y;
 
-                let cell_distance = cell_distances[neighbor_idx];  // Use pre-computed distance
-                
+                let cell_distance = cell_distances[neighbor_idx]; // Use pre-computed distance
+
                 if let Some(cell) = grid.cells.get(linear_index) {
                     let weighted_velocity = cell.velocity * weight;
 

@@ -1,11 +1,10 @@
 use std::time::Duration;
 
 use bevy::prelude::*;
-use mpm2d::{SolverParams, GRAVITY, Cell, GRID_RESOLUTION, Grid, Particle, MaterialType};
-use mpm2d::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
 use mpm2d::core::{calculate_grid_velocities, zero_grid};
+use mpm2d::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
+use mpm2d::{Cell, GRAVITY, GRID_RESOLUTION, Grid, MaterialType, Particle, SolverParams};
 use rand::Rng;
-
 
 fn init_grid(mut grid: ResMut<Grid>) {
     grid.cells = vec![Cell::zeroed(); GRID_RESOLUTION * GRID_RESOLUTION];

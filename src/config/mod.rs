@@ -1,5 +1,5 @@
 //! Configuration and parameters
-//! 
+//!
 //! Constants and solver settings.
 
 pub mod constants;

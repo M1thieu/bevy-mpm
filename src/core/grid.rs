@@ -13,11 +13,16 @@ pub const KERNEL_SIZE: usize = 3;
 
 // Pre-computed neighbor offsets for 3x3 grid pattern (performance optimization)
 pub const NEIGHBOR_OFFSETS: [i32; NEIGHBOR_COUNT] = [
-    -(GRID_RESOLUTION as i32) - 1, -(GRID_RESOLUTION as i32), -(GRID_RESOLUTION as i32) + 1, // Top row
-    -1, 0, 1,                                                                                  // Middle row  
-    (GRID_RESOLUTION as i32) - 1, GRID_RESOLUTION as i32, (GRID_RESOLUTION as i32) + 1,       // Bottom row
+    -(GRID_RESOLUTION as i32) - 1,
+    -(GRID_RESOLUTION as i32),
+    -(GRID_RESOLUTION as i32) + 1, // Top row
+    -1,
+    0,
+    1, // Middle row
+    (GRID_RESOLUTION as i32) - 1,
+    GRID_RESOLUTION as i32,
+    (GRID_RESOLUTION as i32) + 1, // Bottom row
 ];
-
 
 // Const generic version for compile-time optimization
 pub type GridArray<T> = [T; GRID_RESOLUTION * GRID_RESOLUTION];
@@ -53,9 +58,9 @@ pub struct Grid {
 #[inline(always)]
 fn calculate_bspline_weight(d: f32) -> [f32; 3] {
     let d2 = d * d;
-    
+
     [
-        0.5 * (0.5 - d) * (0.5 - d),  // Faster than powi(2)
+        0.5 * (0.5 - d) * (0.5 - d), // Faster than powi(2)
         0.75 - d2,
         0.5 * (0.5 + d) * (0.5 + d),
     ]
@@ -78,7 +83,6 @@ pub fn calculate_grid_weights(particle_position: Vec2) -> (UVec2, [Vec2; 3]) {
 
     (cell_index, weights)
 }
-
 
 // Bounds checking with early exit
 #[inline(always)]
@@ -104,15 +108,16 @@ pub fn is_neighborhood_valid(center_index: usize) -> bool {
         if neighbor_index < 0 || neighbor_index >= (GRID_RESOLUTION * GRID_RESOLUTION) as i32 {
             return false;
         }
-        
+
         // Check for grid edge wrapping
         let center_x = center_index % GRID_RESOLUTION;
         let center_y = center_index / GRID_RESOLUTION;
         let neighbor_x = (neighbor_index as usize) % GRID_RESOLUTION;
         let neighbor_y = (neighbor_index as usize) / GRID_RESOLUTION;
-        
-        if (center_x as i32 - neighbor_x as i32).abs() > 1 || 
-           (center_y as i32 - neighbor_y as i32).abs() > 1 {
+
+        if (center_x as i32 - neighbor_x as i32).abs() > 1
+            || (center_y as i32 - neighbor_y as i32).abs() > 1
+        {
             return false;
         }
     }
@@ -123,18 +128,18 @@ pub fn is_neighborhood_valid(center_index: usize) -> bool {
 #[inline(always)]
 pub fn get_neighbor_indices(center_index: usize) -> [Option<usize>; NEIGHBOR_COUNT] {
     let mut neighbors = [None; NEIGHBOR_COUNT];
-    
+
     // Early exit if entire neighborhood is invalid (batch validation)
     if !is_neighborhood_valid(center_index) {
         return neighbors;
     }
-    
+
     // All neighbors are guaranteed valid, compute directly
     for (i, &offset) in NEIGHBOR_OFFSETS.iter().enumerate() {
         let neighbor_index = (center_index as i32 + offset) as usize;
         neighbors[i] = Some(neighbor_index);
     }
-    
+
     neighbors
 }
 

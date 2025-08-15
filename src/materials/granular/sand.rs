@@ -3,7 +3,7 @@
 //! Future sand implementation.
 
 // Placeholder for future sand material implementation
-// Will use Drucker-Prager plasticity model like Sparkl
+// Will use Drucker-Prager plasticity model for granular materials
 
 // pub fn calculate_stress(particle: &Particle, density: f32) -> Mat2 {
 //     // TODO: Implement Drucker-Prager sand stress calculation
