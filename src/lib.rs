@@ -1,12 +1,10 @@
 //! Material Point Method simulation for Bevy
 //!
-//! MPM physics simulation supporting fluids and solids.
-//!
 //! ```rust
 //! use bevy::prelude::*;
 //! use mpm2d::MpmPlugin;
 //!
-//! App::new().add_plugins((DefaultPlugins, MpmPlugin)).run();
+//! App::new().add_plugins((DefaultPlugins, MpmPlugin::default())).run();
 //! ```
 
 use bevy::prelude::*;
@@ -25,15 +23,49 @@ use crate::core::{calculate_grid_velocities, zero_grid};
 use crate::core::{cleanup_failed_particles, update_particle_grid_indices, update_particle_health};
 use crate::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
 
-pub struct MpmPlugin;
+pub struct MpmPlugin {
+    pub solver_params: Option<SolverParams>,
+    pub debug: bool,
+}
+
+impl Default for MpmPlugin {
+    fn default() -> Self {
+        Self {
+            solver_params: None,
+            debug: false,
+        }
+    }
+}
+
+impl MpmPlugin {
+    pub fn with_params(solver_params: SolverParams) -> Self {
+        Self {
+            solver_params: Some(solver_params),
+            debug: false,
+        }
+    }
+
+    pub fn with_debug() -> Self {
+        Self {
+            solver_params: None,
+            debug: true,
+        }
+    }
+}
 
 impl Plugin for MpmPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Grid {
             cells: vec![Cell::zeroed(); GRID_RESOLUTION * GRID_RESOLUTION],
-        })
-        .insert_resource(SolverParams::default())
-        .add_systems(
+        });
+
+        if let Some(params) = &self.solver_params {
+            app.insert_resource(params.clone());
+        } else {
+            app.insert_resource(SolverParams::default());
+        }
+
+        app.add_systems(
             Update,
             (
                 update_particle_grid_indices,
@@ -47,6 +79,10 @@ impl Plugin for MpmPlugin {
             )
                 .chain(),
         );
+
+        if self.debug {
+            info!("MPM debug mode enabled");
+        }
     }
 }
 

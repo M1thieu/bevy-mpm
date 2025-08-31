@@ -4,10 +4,10 @@
 
 use bevy::prelude::*;
 
-/// Safe division to prevent crashes
+/// Safe division to prevent crashes from zero or tiny values
 #[inline(always)]
 pub fn safe_inverse(e: f32) -> f32 {
-    if e == 0.0 { 0.0 } else { 1.0 / e }
+    if e.abs() < 1e-12 { 0.0 } else { 1.0 / e }
 }
 
 /// Average pressure being applied

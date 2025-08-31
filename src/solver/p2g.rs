@@ -8,12 +8,12 @@ use bevy::prelude::*;
 use crate::config::SolverParams;
 use crate::core::Particle;
 use crate::core::{
-    GRID_RESOLUTION, Grid, KERNEL_SIZE, NEIGHBOR_COUNT, calculate_grid_weights,
-    get_neighbor_indices,
+    GRID_RESOLUTION, Grid, calculate_grid_weights,
+    get_neighbor_indices, calculate_neighbor_distances,
 };
 use crate::materials;
-use crate::materials::MaterialType;
 use crate::materials::utils;
+use crate::materials::MaterialType;
 
 pub fn particle_to_grid_mass_velocity(query: Query<&Particle>, mut grid: ResMut<Grid>) {
     // Sort particles by grid cell for better cache performance
@@ -25,18 +25,8 @@ pub fn particle_to_grid_mass_velocity(query: Query<&Particle>, mut grid: ResMut<
         let center_linear_index = cell_index.y as usize * GRID_RESOLUTION + cell_index.x as usize;
         let neighbor_indices = get_neighbor_indices(center_linear_index);
 
-        // Pre-compute cell positions and distances for all neighbors (cache optimization)
-        let mut cell_positions = [UVec2::ZERO; NEIGHBOR_COUNT];
-        let mut cell_distances = [Vec2::ZERO; NEIGHBOR_COUNT];
-
-        for neighbor_idx in 0..NEIGHBOR_COUNT {
-            let gx = neighbor_idx % KERNEL_SIZE;
-            let gy = neighbor_idx / KERNEL_SIZE;
-            cell_positions[neighbor_idx] =
-                UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-            cell_distances[neighbor_idx] =
-                (cell_positions[neighbor_idx].as_vec2() - particle.position) + 0.5;
-        }
+        // Pre-compute cell distances for all neighbors (cache optimization)
+        let cell_distances = calculate_neighbor_distances(particle.position, cell_index);
 
         for (neighbor_idx, &neighbor_linear_index) in neighbor_indices.iter().enumerate() {
             if let Some(linear_index) = neighbor_linear_index {
@@ -74,14 +64,7 @@ pub fn particle_to_grid_forces(
         let neighbor_indices = get_neighbor_indices(center_linear_index);
 
         // Pre-compute cell distances for reuse in both loops (cache optimization)
-        let mut cell_distances = [Vec2::ZERO; NEIGHBOR_COUNT];
-        for neighbor_idx in 0..NEIGHBOR_COUNT {
-            let gx = neighbor_idx % KERNEL_SIZE;
-            let gy = neighbor_idx / KERNEL_SIZE;
-            let cell_position =
-                UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-            cell_distances[neighbor_idx] = (cell_position.as_vec2() - particle.position) + 0.5;
-        }
+        let cell_distances = calculate_neighbor_distances(particle.position, cell_index);
 
         let mut density = 0.0;
 

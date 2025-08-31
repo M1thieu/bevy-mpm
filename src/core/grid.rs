@@ -3,6 +3,7 @@
 //! 128x128 grid with 3x3 B-spline interpolation.
 
 use bevy::prelude::*;
+use crate::materials::utils;
 
 /// Grid dimensions (128x128 cells)
 pub const GRID_RESOLUTION: usize = 128;
@@ -143,6 +144,21 @@ pub fn get_neighbor_indices(center_index: usize) -> [Option<usize>; NEIGHBOR_COU
     neighbors
 }
 
+// Pre-compute cell distances for all neighbors (shared by P2G and G2P)
+#[inline(always)]
+pub fn calculate_neighbor_distances(particle_position: Vec2, cell_index: UVec2) -> [Vec2; NEIGHBOR_COUNT] {
+    let mut cell_distances = [Vec2::ZERO; NEIGHBOR_COUNT];
+    
+    for neighbor_idx in 0..NEIGHBOR_COUNT {
+        let gx = neighbor_idx % KERNEL_SIZE;
+        let gy = neighbor_idx / KERNEL_SIZE;
+        let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
+        cell_distances[neighbor_idx] = (cell_position.as_vec2() - particle_position) + 0.5;
+    }
+    
+    cell_distances
+}
+
 #[inline(always)]
 pub fn zero_grid(mut grid: ResMut<Grid>) {
     grid.cells.iter_mut().for_each(|cell| cell.zero());
@@ -162,7 +178,7 @@ pub fn calculate_grid_velocities(time: Res<Time>, mut grid: ResMut<Grid>, gravit
     for (index, cell) in grid.cells.iter_mut().enumerate() {
         if cell.mass > 0.0 {
             let gravity_velocity = time.delta_secs() * gravity;
-            cell.velocity /= cell.mass;
+            cell.velocity *= utils::safe_inverse(cell.mass);
             cell.velocity += gravity_velocity;
 
             // Apply configurable boundary handling

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 /// Solver parameters for controlling MPM simulation behavior
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 pub struct SolverParams {
     /// Enable volume preservation for incompressible materials (like water)
     /// When true, applies density correction to maintain volume conservation

@@ -7,7 +7,7 @@ use bevy::prelude::*;
 use crate::core::GRID_RESOLUTION;
 use crate::materials::MaterialType;
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct Particle {
     pub position: Vec2,
     pub velocity: Vec2,
@@ -36,16 +36,41 @@ impl Particle {
             affine_momentum_matrix: Mat2::ZERO,
             material_type,
             grid_index: 0,
-            deformation_gradient: Mat2::IDENTITY, // Start with no deformation
+            deformation_gradient: Mat2::IDENTITY,
             failed: false,
             condition_number: 1.0,
-            volume0: 1.0, // Default unit volume
+            volume0: 1.0,
         }
+    }
+
+    pub fn new(position: Vec2, material_type: MaterialType) -> Self {
+        Self {
+            position,
+            velocity: Vec2::ZERO,
+            mass: 1.0,
+            affine_momentum_matrix: Mat2::ZERO,
+            material_type,
+            grid_index: 0,
+            deformation_gradient: Mat2::IDENTITY,
+            failed: false,
+            condition_number: 1.0,
+            volume0: 1.0,
+        }
+    }
+
+    pub fn with_velocity(mut self, velocity: Vec2) -> Self {
+        self.velocity = velocity;
+        self
+    }
+
+    pub fn with_mass(mut self, mass: f32) -> Self {
+        self.mass = mass;
+        self
     }
 
     /// Create particle with specific density and radius
     pub fn with_density(radius: f32, density: f32) -> Self {
-        let volume = std::f32::consts::PI * radius * radius; // 2D circular area
+        let volume = std::f32::consts::PI * radius * radius;
         Self {
             position: Vec2::ZERO,
             velocity: Vec2::ZERO,
@@ -53,7 +78,7 @@ impl Particle {
             affine_momentum_matrix: Mat2::ZERO,
             material_type: MaterialType::water(),
             grid_index: 0,
-            deformation_gradient: Mat2::IDENTITY, // Start with no deformation
+            deformation_gradient: Mat2::IDENTITY,
             failed: false,
             condition_number: 1.0,
             volume0: volume,
