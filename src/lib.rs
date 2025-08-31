@@ -1,88 +1,91 @@
-pub mod constants;
-pub mod constraints;
-pub mod grid;
-pub mod simulation;
-pub mod solver;
-pub mod pbmpm;
-pub mod bukkit; 
+//! Material Point Method simulation for Bevy
+//!
+//! ```rust
+//! use bevy::prelude::*;
+//! use mpm2d::MpmPlugin;
+//!
+//! App::new().add_plugins((DefaultPlugins, MpmPlugin::default())).run();
+//! ```
 
 use bevy::prelude::*;
-use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
-use grid::*;
-use solver::prelude::*;
-use constants::*;
 
-#[derive(Resource, Clone)]
-pub struct PbmpmConfig {
-    pub iteration_count: u32,
-    pub relaxation_factor: f32,
-    pub warm_start_weight: f32,
+pub mod config;
+pub mod core;
+pub mod materials;
+pub mod solver;
+
+// Clean public API - everything you need to get started
+pub use config::{GRAVITY, SolverParams};
+pub use core::{Cell, GRID_RESOLUTION, Grid, Particle};
+pub use materials::MaterialType;
+
+use crate::core::{calculate_grid_velocities, zero_grid};
+use crate::core::{cleanup_failed_particles, update_particle_grid_indices, update_particle_health};
+use crate::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
+
+pub struct MpmPlugin {
+    pub solver_params: Option<SolverParams>,
+    pub debug: bool,
 }
 
-impl Default for PbmpmConfig {
+impl Default for MpmPlugin {
     fn default() -> Self {
         Self {
-            iteration_count: 2,  // Start with a small number of iterations
-            relaxation_factor: 0.5,  // Slightly reduced for more stability
-            warm_start_weight: 0.2, // Default to 12.5% weight from previous solution
-                                     // NOTE: This allows a natural view of particles individually above 0.5 makes all too cohesive
+            solver_params: None,
+            debug: false,
         }
     }
 }
 
-/// A plugin that sets up the PBMPM simulation systems in the correct order
-pub struct PbmpmPlugin {
-    /// The simulation configuration
-    pub config: PbmpmConfig,
-}
-
-impl Default for PbmpmPlugin {
-    fn default() -> Self {
+impl MpmPlugin {
+    pub fn with_params(solver_params: SolverParams) -> Self {
         Self {
-            config: PbmpmConfig::default(),
+            solver_params: Some(solver_params),
+            debug: false,
+        }
+    }
+
+    pub fn with_debug() -> Self {
+        Self {
+            solver_params: None,
+            debug: true,
         }
     }
 }
 
-/// Initializes the grid with cells
-fn init_grid(mut grid: ResMut<Grid>) {
-    use grid::GRID_RESOLUTION;
-    
-    grid.cells.clear();
-    grid.cells.reserve_exact(GRID_RESOLUTION * GRID_RESOLUTION);
-    for _ in 0..(GRID_RESOLUTION * GRID_RESOLUTION) {
-        grid.cells.push(grid::Cell::zeroed());
-    }
-}
-
-/// Wrapper for the grid velocity calculation that uses the GRAVITY constant
-fn calculate_grid_velocities_wrapper(
-    time: Res<Time>,
-    mut grid: ResMut<Grid>
-) {
-    grid_calculate_velocities(time, grid, GRAVITY);
-}
-
-impl Plugin for PbmpmPlugin {
+impl Plugin for MpmPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Grid { cells: Vec::new() })
-           .insert_resource(bukkit::BukkitConfig::default())
-           .insert_resource(bukkit::BukkitSystem::new(&bukkit::BukkitConfig::default()))
-           .insert_resource(self.config.clone())
-           .add_plugins(FrameTimeDiagnosticsPlugin::default())
-           .add_systems(Startup, init_grid)
-           .add_systems(
-               FixedUpdate,
-               (
-                   bukkit::selective_grid_clear,
-                   bukkit::count_particles_per_bukkit,
-                   bukkit::allocate_bukkit_memory,
-                   bukkit::insert_particles_to_bukkits,
-                   particle_to_grid,
-                   calculate_grid_velocities_wrapper,
-                   grid_to_particle,
-                   pbmpm::solve_constraints_pbmpm,
-               ).chain(),
-           );
+        app.insert_resource(Grid {
+            cells: vec![Cell::zeroed(); GRID_RESOLUTION * GRID_RESOLUTION],
+        });
+
+        if let Some(params) = &self.solver_params {
+            app.insert_resource(params.clone());
+        } else {
+            app.insert_resource(SolverParams::default());
+        }
+
+        app.add_systems(
+            Update,
+            (
+                update_particle_grid_indices,
+                update_particle_health,
+                zero_grid,
+                particle_to_grid_mass_velocity,
+                particle_to_grid_forces,
+                calculate_grid_velocities_with_gravity,
+                grid_to_particle,
+                cleanup_failed_particles,
+            )
+                .chain(),
+        );
+
+        if self.debug {
+            info!("MPM debug mode enabled");
+        }
     }
+}
+
+fn calculate_grid_velocities_with_gravity(time: Res<Time>, grid: ResMut<Grid>) {
+    calculate_grid_velocities(time, grid, GRAVITY);
 }

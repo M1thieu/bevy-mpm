@@ -1,111 +1,115 @@
-use std::time::Instant;
+//! Particle-to-Grid (P2G) transfer operations
+//!
+//! Transfers mass, momentum, and forces from particles to grid nodes.
+//! Includes stress calculation and APIC momentum transfer.
+
 use bevy::prelude::*;
-use crate::grid::*;
-use crate::solver::Particle;
-use crate::bukkit::BukkitSystem;
-use crate::constants::*;
 
-pub fn particle_to_grid(
+use crate::config::SolverParams;
+use crate::core::Particle;
+use crate::core::{
+    GRID_RESOLUTION, Grid, calculate_grid_weights,
+    get_neighbor_indices, calculate_neighbor_distances,
+};
+use crate::materials;
+use crate::materials::utils;
+use crate::materials::MaterialType;
+
+pub fn particle_to_grid_mass_velocity(query: Query<&Particle>, mut grid: ResMut<Grid>) {
+    // Sort particles by grid cell for better cache performance
+    let mut particles: Vec<&Particle> = query.iter().collect();
+    particles.sort_by_key(|particle| particle.grid_index);
+
+    for particle in particles {
+        let (cell_index, weights) = calculate_grid_weights(particle.position);
+        let center_linear_index = cell_index.y as usize * GRID_RESOLUTION + cell_index.x as usize;
+        let neighbor_indices = get_neighbor_indices(center_linear_index);
+
+        // Pre-compute cell distances for all neighbors (cache optimization)
+        let cell_distances = calculate_neighbor_distances(particle.position, cell_index);
+
+        for (neighbor_idx, &neighbor_linear_index) in neighbor_indices.iter().enumerate() {
+            if let Some(linear_index) = neighbor_linear_index {
+                let gx = neighbor_idx % 3;
+                let gy = neighbor_idx / 3;
+                let weight = weights[gx].x * weights[gy].y;
+
+                let cell_distance = cell_distances[neighbor_idx];
+                let q = particle.affine_momentum_matrix * cell_distance;
+
+                let mass_contribution = weight * particle.mass;
+
+                if let Some(cell) = grid.cells.get_mut(linear_index) {
+                    cell.mass += mass_contribution;
+                    cell.velocity += mass_contribution * (particle.velocity + q);
+                }
+            }
+        }
+    }
+}
+
+pub fn particle_to_grid_forces(
     time: Res<Time>,
-    query: Query<&Particle>,
+    solver_params: Res<SolverParams>,
+    mut particles: Query<&mut Particle>,
     mut grid: ResMut<Grid>,
-    mut bukkits: ResMut<BukkitSystem>
 ) {
-    let start = Instant::now();
-    
-    // Clone both the thread data and particle indices to avoid borrowing issues
-    let thread_data = bukkits.thread_data.clone();
-    let particle_indices = bukkits.particle_indices.clone();
-    
-    // FIRST PHASE: Mass and velocity transfer
-    for thread_data in &thread_data {
-        let bukkit_idx = thread_data.bukkit_index;
-        
-        for &entity in &particle_indices[bukkit_idx] {
-            if let Ok(particle) = query.get(entity) {
-                let (cell_index, weights) = grid_calculate_weights(particle.position);
+    // Sort particles by grid cell for better cache performance
+    let mut particle_refs: Vec<_> = particles.iter_mut().collect();
+    particle_refs.sort_by_key(|particle| particle.grid_index);
 
-                for (gx, gy, weight) in grid_iter_quadratic_weights(&weights) {
-                    let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-                    
-                    if !thread_data.cell_in_bukkit_range(cell_position) {
-                        continue;
-                    }
-                    
-                    let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
-                    let q = particle.affine_momentum_matrix * cell_distance;
-                    let mass_contribution = weight * particle.mass;
-                    
-                    if let Some((cell_idx, cell)) = grid_get_cell_mut(&mut grid, cell_position) {
-                        cell.mass += mass_contribution;
-                        cell.velocity += mass_contribution * (particle.velocity + q);
-                        
-                        // Mark this cell as active
-                        bukkits.mark_grid_cell_active(cell_idx);
-                    }
+    for particle in particle_refs {
+        let (cell_index, weights) = calculate_grid_weights(particle.position);
+        let center_linear_index = cell_index.y as usize * GRID_RESOLUTION + cell_index.x as usize;
+        let neighbor_indices = get_neighbor_indices(center_linear_index);
+
+        // Pre-compute cell distances for reuse in both loops (cache optimization)
+        let cell_distances = calculate_neighbor_distances(particle.position, cell_index);
+
+        let mut density = 0.0;
+
+        for (neighbor_idx, &neighbor_linear_index) in neighbor_indices.iter().enumerate() {
+            if let Some(linear_index) = neighbor_linear_index {
+                let gx = neighbor_idx % 3;
+                let gy = neighbor_idx / 3;
+                let weight = weights[gx].x * weights[gy].y;
+
+                if let Some(cell) = grid.cells.get(linear_index) {
+                    density += cell.mass * weight;
+                }
+            }
+        }
+
+        let volume = particle.mass * utils::safe_inverse(density);
+
+        // Calculate stress based on material type
+        let stress = match &particle.material_type {
+            MaterialType::Water { .. } => {
+                // Use organized water material function
+                materials::fluid::water::calculate_stress(
+                    &particle,
+                    density,
+                    solver_params.volume_correction_strength,
+                    solver_params.preserve_fluid_volume && particle.material_type.is_fluid(),
+                )
+            }
+        };
+
+        let eq_16_term_0 = -volume * stress * time.delta_secs();
+
+        for (neighbor_idx, &neighbor_linear_index) in neighbor_indices.iter().enumerate() {
+            if let Some(linear_index) = neighbor_linear_index {
+                let gx = neighbor_idx % 3;
+                let gy = neighbor_idx / 3;
+                let weight = weights[gx].x * weights[gy].y;
+
+                let cell_distance = cell_distances[neighbor_idx]; // Use pre-computed distance
+
+                if let Some(cell) = grid.cells.get_mut(linear_index) {
+                    let momentum = eq_16_term_0 * weight * cell_distance;
+                    cell.velocity += momentum;
                 }
             }
         }
     }
-    
-    // SECOND PHASE: Forces (using the updated grid masses)
-    for thread_data in &thread_data {
-        let bukkit_idx = thread_data.bukkit_index;
-        
-        for &entity in &particle_indices[bukkit_idx] {
-            if let Ok(particle) = query.get(entity) {
-                let (cell_index, weights) = grid_calculate_weights(particle.position);
-
-                let mut density = 0.0;
-
-                // Density calculation
-                for (gx, gy, weight) in grid_iter_quadratic_weights(&weights) {
-                    let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-                    
-                    if !thread_data.cell_in_bukkit_range(cell_position) {
-                        continue;
-                    }
-
-                    if let Some((_cell_idx, cell)) = grid_get_cell(&grid, cell_position) {
-                        density += cell.mass * weight;
-                    }
-                }
-
-                let volume = particle.mass / density;
-                let pressure = f32::max(-0.1, EOS_STIFFNESS * ((density / REST_DENSITY).powi(EOS_POWER as i32) - 1.0));
-                let mut stress = Mat2::IDENTITY * -pressure;
-
-                let dudv = particle.affine_momentum_matrix;
-                let mut strain = dudv;
-                let trace = strain.col(1).x + strain.col(0).y;
-                strain.col_mut(0).y = trace;
-                strain.col_mut(1).x = trace;
-
-                stress += DYNAMIC_VISCOSITY * strain;
-                let eq_16_term_0 = -volume * 4.0 * stress * time.delta_secs();
-
-                // Momentum calculation
-                for (gx, gy, weight) in grid_iter_quadratic_weights(&weights) {
-                    let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-                    
-                    if !thread_data.cell_in_bukkit_range(cell_position) {
-                        continue;
-                    }
-                    
-                    let cell_distance = (cell_position.as_vec2() - particle.position) + 0.5;
-                    
-                    if let Some((cell_idx, cell)) = grid_get_cell_mut(&mut grid, cell_position) {
-                        let momentum = eq_16_term_0 * weight * cell_distance;
-                        cell.velocity += momentum;
-                        
-                        // Mark this cell as active
-                        bukkits.mark_grid_cell_active(cell_idx);
-                    }
-                }
-            }
-        }
-    }
-    
-    let elapsed = start.elapsed().as_secs_f32() * 1000.0;
-    info!("p2g: {:.3}ms", elapsed);
 }

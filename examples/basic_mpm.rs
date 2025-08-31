@@ -1,10 +1,14 @@
 use std::time::Duration;
 
 use bevy::prelude::*;
+use mpm2d::core::{calculate_grid_velocities, zero_grid};
+use mpm2d::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
+use mpm2d::{Cell, GRAVITY, GRID_RESOLUTION, Grid, MaterialType, Particle, SolverParams};
 use rand::Rng;
-use mpm2d::simulation::MaterialType;
-use mpm2d::solver::prelude::*;
-use mpm2d::PbmpmPlugin;
+
+fn init_grid(mut grid: ResMut<Grid>) {
+    grid.cells = vec![Cell::zeroed(); GRID_RESOLUTION * GRID_RESOLUTION];
+}
 
 fn init_particles(
     mut commands: Commands,
@@ -14,20 +18,16 @@ fn init_particles(
     let mut rand = rand::rng();
     for x in 0..50 {
         for y in 0..100 {
+            let mut particle = Particle::zeroed(MaterialType::water());
+            particle.position = Vec2 {
+                x: 16.0 + x as f32 / 4.0,
+                y: 32.0 + y as f32 / 4.0,
+            };
+            particle.velocity =
+                Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0));
+
             commands.spawn((
-                Particle {
-                    position: Vec2 {
-                        x: 16.0 + x as f32 / 4.0,
-                        y: 32.0 + y as f32 / 4.0,
-                    },
-                    velocity: Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-10.0..=10.0)),
-                    mass: 1.0,
-                    affine_momentum_matrix: Mat2::ZERO,
-                    deformation_displacement: Mat2::ZERO,
-                    prev_deformation_displacement: Mat2::ZERO,
-                    liquid_density: 1.0,
-                    material_type: MaterialType::Liquid { vp0: 1.0, ap: 0.0, jp: 1.0 },
-                },
+                particle,
                 Mesh2d(meshes.add(Circle::new(1.0))),
                 MeshMaterial2d(materials.add(Color::hsl(210.0, 0.7, 0.3))),
                 Transform::from_xyz(0.0, 0.0, 0.0),
@@ -36,20 +36,16 @@ fn init_particles(
     }
     for x in 0..50 {
         for y in 0..100 {
+            let mut particle = Particle::zeroed(MaterialType::water());
+            particle.position = Vec2 {
+                x: 112.0 + x as f32 / 4.0,
+                y: 32.0 + y as f32 / 4.0,
+            };
+            particle.velocity =
+                Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0));
+
             commands.spawn((
-                Particle {
-                    position: Vec2 {
-                        x: 112.0 + x as f32 / 4.0,
-                        y: 32.0 + y as f32 / 4.0,
-                    },
-                    velocity: Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-10.0..=10.0)),
-                    mass: 1.0,
-                    affine_momentum_matrix: Mat2::ZERO,
-                    deformation_displacement: Mat2::ZERO,
-                    prev_deformation_displacement: Mat2::ZERO,
-                    liquid_density: 1.0,
-                    material_type: MaterialType::Liquid { vp0: 1.0, ap: 0.0, jp: 1.0 },
-                },
+                particle,
                 Mesh2d(meshes.add(Circle::new(1.0))),
                 MeshMaterial2d(materials.add(Color::hsl(210.0, 0.7, 0.3))),
                 Transform::from_xyz(0.0, 0.0, 0.0),
@@ -94,20 +90,15 @@ fn controls(
         let mut rand = rand::rng();
         let handle = meshes.add(Circle::new(1.0));
 
+        let mut particle = Particle::zeroed(MaterialType::water());
+        particle.position = Vec2 { x: 64.0, y: 64.0 };
+        particle.velocity = Vec2::new(
+            rand.random_range(-10.0..=10.0),
+            rand.random_range(-50.0..=-20.0),
+        );
+
         commands.spawn((
-            Particle {
-                position: Vec2 {
-                    x: 64.0,
-                    y: 64.0,
-                },
-                velocity: Vec2::new(rand.random_range(-10.0..=10.0), rand.random_range(-50.0..=-20.0)),
-                mass: 1.0,
-                affine_momentum_matrix: Mat2::ZERO,
-                deformation_displacement: Mat2::ZERO,
-                prev_deformation_displacement: Mat2::ZERO,
-                liquid_density: 1.0,
-                material_type: MaterialType::Liquid { vp0: 1.0, ap: 0.0, jp: 1.0 },
-            },
+            particle,
             Mesh2d(handle),
             MeshMaterial2d(materials.add(Color::hsl(0.0, 1.0, 0.5))),
             Transform::from_xyz(0.0, 0.0, 0.0),
@@ -126,16 +117,44 @@ fn controls(
     }
 }
 
-fn update_particle_transforms(
-    mut query: Query<(&mut Transform, &Particle)>,
-) {
+fn update_particle_transforms(mut query: Query<(&mut Transform, &Particle)>) {
     query.par_iter_mut().for_each(|(mut transform, particle)| {
         transform.translation = Vec3::new(
-            (particle.position.x - 64.0) * 4.0, 
-            (particle.position.y - 64.0) * 4.0, 
-            0.0
+            (particle.position.x - 64.0) * 4.0,
+            (particle.position.y - 64.0) * 4.0,
+            0.0,
         );
     });
+}
+
+fn calculate_grid_velocities_wrapper(time: Res<Time>, grid: ResMut<Grid>) {
+    calculate_grid_velocities(time, grid, GRAVITY);
+}
+
+pub struct MpmPlugin;
+
+impl Plugin for MpmPlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(Grid { cells: Vec::new() });
+        app.insert_resource(SolverParams::default());
+        app.insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(
+            1.0 / 60.0,
+        )));
+        app.add_systems(Startup, (init_grid, init_particles).chain());
+        app.add_systems(
+            FixedUpdate,
+            (
+                zero_grid,
+                particle_to_grid_mass_velocity,
+                particle_to_grid_forces,
+                calculate_grid_velocities_wrapper,
+                grid_to_particle,
+                update_particle_transforms,
+                controls,
+            )
+                .chain(),
+        );
+    }
 }
 
 fn init(mut commands: Commands) {
@@ -145,9 +164,7 @@ fn init(mut commands: Commands) {
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(PbmpmPlugin::default()) // Use the plugin from our library
-        .insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(1.0 / 60.0)))
-        .add_systems(Startup, (init, init_particles))
-        .add_systems(FixedUpdate, (update_particle_transforms, controls).chain())
+        .add_plugins(MpmPlugin)
+        .add_systems(Startup, init)
         .run();
 }
