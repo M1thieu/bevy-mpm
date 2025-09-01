@@ -2,14 +2,14 @@
 //!
 //! Handles water pressure, viscosity, and EOS calculations.
 
-use crate::config::{DYNAMIC_VISCOSITY, EOS_POWER, EOS_STIFFNESS, K_WATER, REST_DENSITY};
+use crate::config::{EOS_POWER, EOS_STIFFNESS, K_WATER, REST_DENSITY};
 use crate::core::Particle;
 use crate::materials::utils;
 use bevy::prelude::*;
 
 /// Calculate constitutive model for water (original logic from simulation.rs)
 pub fn apply_constitutive_model(vp0: f32, jp: f32) -> f32 {
-    let djp = -K_WATER * (utils::safe_inverse(jp.powi(3)) - 1.0);
+    let djp = -K_WATER * (utils::inv_exact(jp.powi(3)) - 1.0);
     djp * vp0 * jp
 }
 
@@ -24,8 +24,9 @@ pub fn calculate_stress(
     density: f32,
     volume_correction_strength: f32,
     preserve_volume: bool,
+    dynamic_viscosity: f32,
 ) -> Mat2 {
-    let volume = particle.mass * utils::safe_inverse(density);
+    let volume = particle.mass * utils::inv_exact(density);
 
     // Original EOS pressure
     let eos_pressure = f32::max(
@@ -53,7 +54,7 @@ pub fn calculate_stress(
     let trace = strain.col(1).x + strain.col(0).y;
     strain.col_mut(0).y = trace;
     strain.col_mut(1).x = trace;
-    let viscosity_term = DYNAMIC_VISCOSITY * strain;
+    let viscosity_term = dynamic_viscosity * strain;
 
     stress + viscosity_term
 }

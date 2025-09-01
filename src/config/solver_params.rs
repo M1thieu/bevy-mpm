@@ -9,6 +9,9 @@ pub struct SolverParams {
 
     /// Strength of volume preservation correction (0.0 = disabled, 1.0 = strong)
     pub volume_correction_strength: f32,
+
+    /// Dynamic viscosity for fluid materials
+    pub dynamic_viscosity: f32,
 }
 
 impl Default for SolverParams {
@@ -16,6 +19,7 @@ impl Default for SolverParams {
         Self {
             preserve_fluid_volume: true, // Enable by default for better water physics
             volume_correction_strength: 0.5, // Moderate correction strength
+            dynamic_viscosity: 0.1, // Default water viscosity
         }
     }
 }
@@ -26,6 +30,7 @@ impl SolverParams {
         Self {
             preserve_fluid_volume: true,
             volume_correction_strength: 0.5,
+            dynamic_viscosity: 0.1,
         }
     }
 
@@ -34,6 +39,7 @@ impl SolverParams {
         Self {
             preserve_fluid_volume: false,
             volume_correction_strength: 0.0,
+            dynamic_viscosity: 0.1,
         }
     }
 

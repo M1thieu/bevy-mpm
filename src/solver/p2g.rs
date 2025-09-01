@@ -80,7 +80,7 @@ pub fn particle_to_grid_forces(
             }
         }
 
-        let volume = particle.mass * utils::safe_inverse(density);
+        let volume = particle.mass * utils::inv_exact(density);
 
         // Calculate stress based on material type
         let stress = match &particle.material_type {
@@ -91,6 +91,7 @@ pub fn particle_to_grid_forces(
                     density,
                     solver_params.volume_correction_strength,
                     solver_params.preserve_fluid_volume && particle.material_type.is_fluid(),
+                    solver_params.dynamic_viscosity,
                 )
             }
         };

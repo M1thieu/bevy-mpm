@@ -178,7 +178,7 @@ pub fn calculate_grid_velocities(time: Res<Time>, mut grid: ResMut<Grid>, gravit
     for (index, cell) in grid.cells.iter_mut().enumerate() {
         if cell.mass > 0.0 {
             let gravity_velocity = time.delta_secs() * gravity;
-            cell.velocity *= utils::safe_inverse(cell.mass);
+            cell.velocity *= utils::inv_exact(cell.mass);
             cell.velocity += gravity_velocity;
 
             // Apply configurable boundary handling
