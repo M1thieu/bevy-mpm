@@ -32,7 +32,7 @@ impl MaterialType {
     pub fn constitutive_model(&mut self) {
         match self {
             Self::Water { vp0, ap, jp } => {
-                *ap = materials::fluid::water::apply_constitutive_model(*vp0, *jp);
+                *ap = materials::fluids::water::apply_constitutive_model(*vp0, *jp);
             }
         }
     }
@@ -40,7 +40,7 @@ impl MaterialType {
     pub fn update_deformation(&mut self, t: Mat2, dt: f32) {
         match self {
             Self::Water { vp0: _, ap: _, jp } => {
-                materials::fluid::water::update_deformation(jp, t, dt);
+                materials::fluids::water::update_deformation(jp, t, dt);
             }
         }
     }

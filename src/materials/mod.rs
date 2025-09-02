@@ -6,10 +6,10 @@
 //! * `solid` - Elastic materials (coming soon)  
 //! * `granular` - Sand-like materials (coming soon)
 
-pub mod fluid;
+pub mod fluids;
 pub mod granular;
 pub mod material_types;
-pub mod solid;
+pub mod solids;
 pub mod utils;
 
 // Re-export the main material type for convenience

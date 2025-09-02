@@ -86,7 +86,7 @@ pub fn particle_to_grid_forces(
         let stress = match &particle.material_type {
             MaterialType::Water { .. } => {
                 // Use organized water material function
-                materials::fluid::water::calculate_stress(
+                materials::fluids::water::calculate_stress(
                     &particle,
                     density,
                     solver_params.volume_correction_strength,
