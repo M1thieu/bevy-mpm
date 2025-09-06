@@ -85,6 +85,7 @@ pub fn calculate_grid_weights(particle_position: Vec2) -> (UVec2, [Vec2; 3]) {
     (cell_index, weights)
 }
 
+
 // Bounds checking with early exit
 #[inline(always)]
 pub fn is_valid_grid_position(pos: UVec2) -> bool {

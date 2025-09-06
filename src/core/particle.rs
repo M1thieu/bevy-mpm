@@ -18,6 +18,7 @@ pub struct Particle {
 
     // Deformation tracking for future material models
     pub deformation_gradient: Mat2, // F matrix - tracks material deformation
+    pub velocity_gradient: Mat2,    // ∇v - velocity gradient for APIC and stress calculations
 
     // Particle health system
     pub failed: bool,          // Mark particle for removal
@@ -37,6 +38,7 @@ impl Particle {
             material_type,
             grid_index: 0,
             deformation_gradient: Mat2::IDENTITY,
+            velocity_gradient: Mat2::ZERO,
             failed: false,
             condition_number: 1.0,
             volume0: 1.0,
@@ -52,6 +54,7 @@ impl Particle {
             material_type,
             grid_index: 0,
             deformation_gradient: Mat2::IDENTITY,
+            velocity_gradient: Mat2::ZERO,
             failed: false,
             condition_number: 1.0,
             volume0: 1.0,
@@ -79,6 +82,7 @@ impl Particle {
             material_type: MaterialType::water(),
             grid_index: 0,
             deformation_gradient: Mat2::IDENTITY,
+            velocity_gradient: Mat2::ZERO,
             failed: false,
             condition_number: 1.0,
             volume0: volume,

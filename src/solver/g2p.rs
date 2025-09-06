@@ -58,9 +58,9 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
         }
 
         particle.affine_momentum_matrix = b;
+        particle.velocity_gradient = b; // Store velocity gradient for P2G APIC
 
         // Update deformation gradient: F_new = (I + dt * velocity_gradient) * F_old
-        // The matrix 'b' represents the velocity gradient ∇v
         let dt = time.delta_secs();
         let velocity_gradient = b;
         let deformation_update = Mat2::IDENTITY + velocity_gradient * dt;

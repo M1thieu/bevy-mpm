@@ -96,6 +96,7 @@ pub fn particle_to_grid_forces(
             }
         };
 
+        // Use current working stress-force method for now (keep fluids working)
         let eq_16_term_0 = -volume * stress * time.delta_secs();
 
         for (neighbor_idx, &neighbor_linear_index) in neighbor_indices.iter().enumerate() {
@@ -104,9 +105,10 @@ pub fn particle_to_grid_forces(
                 let gy = neighbor_idx / 3;
                 let weight = weights[gx].x * weights[gy].y;
 
-                let cell_distance = cell_distances[neighbor_idx]; // Use pre-computed distance
+                let cell_distance = cell_distances[neighbor_idx];
 
                 if let Some(cell) = grid.cells.get_mut(linear_index) {
+                    // Traditional force-based approach (working for fluids)
                     let momentum = eq_16_term_0 * weight * cell_distance;
                     cell.velocity += momentum;
                 }

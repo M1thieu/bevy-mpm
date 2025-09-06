@@ -25,6 +25,8 @@ pub fn stress_magnitude(stress: Mat2) -> f32 {
 /// Physics parameter conversions - universal MPM utilities
 /// Used by all professional MPM implementations for material calculations
 pub mod physics {
+    use bevy::prelude::*;
+
     /// Computes the Lamé parameters (lambda, mu) from Young's modulus and Poisson ratio
     /// These are fundamental for any solid material stress calculations
     #[inline]
@@ -58,6 +60,26 @@ pub mod physics {
     #[inline]
     pub fn bulk_modulus_from_lame(lambda: f32, mu: f32) -> f32 {
         lambda + 2.0 * mu / 3.0
+    }
+
+
+    /// Extracts the strain rate (symmetric) part of velocity gradient
+    #[inline]
+    pub fn strain_rate(velocity_gradient: &Mat2) -> Mat2 {
+        (*velocity_gradient + velocity_gradient.transpose()) * 0.5
+    }
+
+    /// Extracts deviatoric part of tensor (removes spherical part)
+    #[inline]
+    pub fn deviatoric_part(tensor: &Mat2) -> Mat2 {
+        let spherical = spherical_part(tensor);
+        *tensor - Mat2::from_diagonal(Vec2::splat(spherical))
+    }
+
+    /// Extracts spherical part of tensor (mean of diagonal)
+    #[inline]
+    pub fn spherical_part(tensor: &Mat2) -> f32 {
+        (tensor.col(0).x + tensor.col(1).y) * 0.5
     }
 }
 
