@@ -6,10 +6,7 @@
 use bevy::prelude::*;
 
 use crate::core::Particle;
-use crate::core::{
-    GRID_RESOLUTION, Grid, calculate_grid_weights,
-    get_neighbor_indices, calculate_neighbor_distances,
-};
+use crate::core::{GRID_RESOLUTION, Grid, GridInterpolation};
 
 /// Implements proper affine matrix update using outer product
 pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: Res<Grid>) {
@@ -20,22 +17,15 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
     for mut particle in particles {
         particle.velocity = Vec2::ZERO;
 
-        let (cell_index, weights) = calculate_grid_weights(particle.position);
-        let center_linear_index = cell_index.y as usize * GRID_RESOLUTION + cell_index.x as usize;
-        let neighbor_indices = get_neighbor_indices(center_linear_index);
-
-        // Pre-compute cell distances (cache optimization)
-        let cell_distances = calculate_neighbor_distances(particle.position, cell_index);
+        // Unified interpolation in G2P
+        let interp = GridInterpolation::compute_for_particle(particle.position);
 
         let mut b = Mat2::ZERO;
 
-        for (neighbor_idx, &neighbor_linear_index) in neighbor_indices.iter().enumerate() {
+        for (neighbor_idx, &neighbor_linear_index) in interp.neighbor_indices.iter().enumerate() {
             if let Some(linear_index) = neighbor_linear_index {
-                let gx = neighbor_idx % 3;
-                let gy = neighbor_idx / 3;
-                let weight = weights[gx].x * weights[gy].y;
-
-                let cell_distance = cell_distances[neighbor_idx]; // Use pre-computed distance
+                let weight = interp.weight_for_neighbor(neighbor_idx);
+                let cell_distance = interp.cell_distances[neighbor_idx];
 
                 if let Some(cell) = grid.cells.get(linear_index) {
                     let weighted_velocity = cell.velocity * weight;

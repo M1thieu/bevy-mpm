@@ -7,10 +7,7 @@ use bevy::prelude::*;
 
 use crate::config::SolverParams;
 use crate::core::Particle;
-use crate::core::{
-    GRID_RESOLUTION, Grid, calculate_grid_weights,
-    get_neighbor_indices, calculate_neighbor_distances,
-};
+use crate::core::{Grid, GridInterpolation};
 use crate::materials;
 use crate::materials::utils;
 use crate::materials::MaterialType;
@@ -21,20 +18,13 @@ pub fn particle_to_grid_mass_velocity(query: Query<&Particle>, mut grid: ResMut<
     particles.sort_by_key(|particle| particle.grid_index);
 
     for particle in particles {
-        let (cell_index, weights) = calculate_grid_weights(particle.position);
-        let center_linear_index = cell_index.y as usize * GRID_RESOLUTION + cell_index.x as usize;
-        let neighbor_indices = get_neighbor_indices(center_linear_index);
+        // Compute all interpolation data once
+        let interp = GridInterpolation::compute_for_particle(particle.position);
 
-        // Pre-compute cell distances for all neighbors (cache optimization)
-        let cell_distances = calculate_neighbor_distances(particle.position, cell_index);
-
-        for (neighbor_idx, &neighbor_linear_index) in neighbor_indices.iter().enumerate() {
+        for (neighbor_idx, &neighbor_linear_index) in interp.neighbor_indices.iter().enumerate() {
             if let Some(linear_index) = neighbor_linear_index {
-                let gx = neighbor_idx % 3;
-                let gy = neighbor_idx / 3;
-                let weight = weights[gx].x * weights[gy].y;
-
-                let cell_distance = cell_distances[neighbor_idx];
+                let weight = interp.weight_for_neighbor(neighbor_idx);
+                let cell_distance = interp.cell_distances[neighbor_idx];
                 let q = particle.affine_momentum_matrix * cell_distance;
 
                 let mass_contribution = weight * particle.mass;
@@ -59,20 +49,14 @@ pub fn particle_to_grid_forces(
     particle_refs.sort_by_key(|particle| particle.grid_index);
 
     for particle in particle_refs {
-        let (cell_index, weights) = calculate_grid_weights(particle.position);
-        let center_linear_index = cell_index.y as usize * GRID_RESOLUTION + cell_index.x as usize;
-        let neighbor_indices = get_neighbor_indices(center_linear_index);
-
-        // Pre-compute cell distances for reuse in both loops (cache optimization)
-        let cell_distances = calculate_neighbor_distances(particle.position, cell_index);
+        // Unified interpolation computation
+        let interp = GridInterpolation::compute_for_particle(particle.position);
 
         let mut density = 0.0;
 
-        for (neighbor_idx, &neighbor_linear_index) in neighbor_indices.iter().enumerate() {
+        for (neighbor_idx, &neighbor_linear_index) in interp.neighbor_indices.iter().enumerate() {
             if let Some(linear_index) = neighbor_linear_index {
-                let gx = neighbor_idx % 3;
-                let gy = neighbor_idx / 3;
-                let weight = weights[gx].x * weights[gy].y;
+                let weight = interp.weight_for_neighbor(neighbor_idx);
 
                 if let Some(cell) = grid.cells.get(linear_index) {
                     density += cell.mass * weight;
@@ -99,13 +83,10 @@ pub fn particle_to_grid_forces(
         // Use current working stress-force method for now (keep fluids working)
         let eq_16_term_0 = -volume * stress * time.delta_secs();
 
-        for (neighbor_idx, &neighbor_linear_index) in neighbor_indices.iter().enumerate() {
+        for (neighbor_idx, &neighbor_linear_index) in interp.neighbor_indices.iter().enumerate() {
             if let Some(linear_index) = neighbor_linear_index {
-                let gx = neighbor_idx % 3;
-                let gy = neighbor_idx / 3;
-                let weight = weights[gx].x * weights[gy].y;
-
-                let cell_distance = cell_distances[neighbor_idx];
+                let weight = interp.weight_for_neighbor(neighbor_idx);
+                let cell_distance = interp.cell_distances[neighbor_idx];
 
                 if let Some(cell) = grid.cells.get_mut(linear_index) {
                     // Traditional force-based approach (working for fluids)

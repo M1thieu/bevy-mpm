@@ -67,22 +67,57 @@ fn calculate_bspline_weight(d: f32) -> [f32; 3] {
     ]
 }
 
-// Calculate quadratic B-spline weights for MPM interpolation
+/// Unified grid interpolation data - computes once, reuses everywhere
+pub struct GridInterpolation {
+    pub cell_index: UVec2,
+    pub weights: [Vec2; 3],
+    pub neighbor_indices: [Option<usize>; NEIGHBOR_COUNT],
+    pub cell_distances: [Vec2; NEIGHBOR_COUNT],
+}
+
+impl GridInterpolation {
+    /// Create complete interpolation data for a particle position
+    #[inline(always)]
+    pub fn compute_for_particle(particle_position: Vec2) -> Self {
+        let cell_index = particle_position.as_uvec2();
+        let cell_difference = (particle_position - cell_index.as_vec2()) - 0.5;
+
+        let x_weights = calculate_bspline_weight(cell_difference.x);
+        let y_weights = calculate_bspline_weight(cell_difference.y);
+
+        let weights = [
+            Vec2::new(x_weights[0], y_weights[0]),
+            Vec2::new(x_weights[1], y_weights[1]),
+            Vec2::new(x_weights[2], y_weights[2]),
+        ];
+
+        // Compute all neighbor data once
+        let center_linear_index = cell_index.y as usize * GRID_RESOLUTION + cell_index.x as usize;
+        let neighbor_indices = get_neighbor_indices(center_linear_index);
+        let cell_distances = calculate_neighbor_distances(particle_position, cell_index);
+
+        Self {
+            cell_index,
+            weights,
+            neighbor_indices,
+            cell_distances,
+        }
+    }
+
+    /// Get interpolation weight for a specific neighbor
+    #[inline(always)]
+    pub fn weight_for_neighbor(&self, neighbor_idx: usize) -> f32 {
+        let gx = neighbor_idx % KERNEL_SIZE;
+        let gy = neighbor_idx / KERNEL_SIZE;
+        self.weights[gx].x * self.weights[gy].y
+    }
+}
+
+// Legacy API for backward compatibility - will be deprecated
 #[inline(always)]
 pub fn calculate_grid_weights(particle_position: Vec2) -> (UVec2, [Vec2; 3]) {
-    let cell_index = particle_position.as_uvec2();
-    let cell_difference = (particle_position - cell_index.as_vec2()) - 0.5;
-
-    let x_weights = calculate_bspline_weight(cell_difference.x);
-    let y_weights = calculate_bspline_weight(cell_difference.y);
-
-    let weights = [
-        Vec2::new(x_weights[0], y_weights[0]),
-        Vec2::new(x_weights[1], y_weights[1]),
-        Vec2::new(x_weights[2], y_weights[2]),
-    ];
-
-    (cell_index, weights)
+    let interp = GridInterpolation::compute_for_particle(particle_position);
+    (interp.cell_index, interp.weights)
 }
 
 
