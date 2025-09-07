@@ -13,11 +13,7 @@ use crate::materials::utils;
 use crate::materials::MaterialType;
 
 pub fn particle_to_grid_mass_velocity(query: Query<&Particle>, mut grid: ResMut<Grid>) {
-    // Sort particles by grid cell for better cache performance
-    let mut particles: Vec<&Particle> = query.iter().collect();
-    particles.sort_by_key(|particle| particle.grid_index);
-
-    for particle in particles {
+    for particle in &query {
         // Compute all interpolation data once
         let interp = GridInterpolation::compute_for_particle(particle.position);
 
@@ -44,11 +40,7 @@ pub fn particle_to_grid_forces(
     mut particles: Query<&mut Particle>,
     mut grid: ResMut<Grid>,
 ) {
-    // Sort particles by grid cell for better cache performance
-    let mut particle_refs: Vec<_> = particles.iter_mut().collect();
-    particle_refs.sort_by_key(|particle| particle.grid_index);
-
-    for particle in particle_refs {
+    for particle in &mut particles {
         // Unified interpolation computation
         let interp = GridInterpolation::compute_for_particle(particle.position);
 

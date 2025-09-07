@@ -10,11 +10,7 @@ use crate::core::{GRID_RESOLUTION, Grid, GridInterpolation};
 
 /// Implements proper affine matrix update using outer product
 pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: Res<Grid>) {
-    // Sort particles by grid cell for better cache performance
-    let mut particles: Vec<_> = query.iter_mut().collect();
-    particles.sort_by_key(|particle| particle.grid_index);
-
-    for mut particle in particles {
+    for mut particle in &mut query {
         particle.velocity = Vec2::ZERO;
 
         // Unified interpolation in G2P
