@@ -18,10 +18,10 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
 
         let mut b = Mat2::ZERO;
 
-        for (neighbor_idx, &neighbor_linear_index) in interp.neighbor_indices.iter().enumerate() {
+        for (neighbor_idx, (&neighbor_linear_index, &cell_distance)) in
+            interp.neighbor_indices.iter().zip(&interp.cell_distances).enumerate() {
             if let Some(linear_index) = neighbor_linear_index {
                 let weight = interp.weight_for_neighbor(neighbor_idx);
-                let cell_distance = interp.cell_distances[neighbor_idx];
 
                 if let Some(cell) = grid.cells.get(linear_index) {
                     let weighted_velocity = cell.velocity * weight;

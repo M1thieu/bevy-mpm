@@ -17,10 +17,10 @@ pub fn particle_to_grid_mass_velocity(query: Query<&Particle>, mut grid: ResMut<
         // Compute all interpolation data once
         let interp = GridInterpolation::compute_for_particle(particle.position);
 
-        for (neighbor_idx, &neighbor_linear_index) in interp.neighbor_indices.iter().enumerate() {
+        for (neighbor_idx, (&neighbor_linear_index, &cell_distance)) in
+            interp.neighbor_indices.iter().zip(&interp.cell_distances).enumerate() {
             if let Some(linear_index) = neighbor_linear_index {
                 let weight = interp.weight_for_neighbor(neighbor_idx);
-                let cell_distance = interp.cell_distances[neighbor_idx];
                 let q = particle.affine_momentum_matrix * cell_distance;
 
                 let mass_contribution = weight * particle.mass;
@@ -75,10 +75,10 @@ pub fn particle_to_grid_forces(
         // Use current working stress-force method for now (keep fluids working)
         let eq_16_term_0 = -volume * stress * time.delta_secs();
 
-        for (neighbor_idx, &neighbor_linear_index) in interp.neighbor_indices.iter().enumerate() {
+        for (neighbor_idx, (&neighbor_linear_index, &cell_distance)) in
+            interp.neighbor_indices.iter().zip(&interp.cell_distances).enumerate() {
             if let Some(linear_index) = neighbor_linear_index {
                 let weight = interp.weight_for_neighbor(neighbor_idx);
-                let cell_distance = interp.cell_distances[neighbor_idx];
 
                 if let Some(cell) = grid.cells.get_mut(linear_index) {
                     // Traditional force-based approach (working for fluids)
