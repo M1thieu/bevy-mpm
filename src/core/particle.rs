@@ -4,7 +4,7 @@
 
 use bevy::prelude::*;
 
-use crate::core::GRID_RESOLUTION;
+// Grid indexing removed - using coordinate-native sparse grid access
 use crate::materials::MaterialType;
 
 #[derive(Component, Clone)]
@@ -14,7 +14,6 @@ pub struct Particle {
     pub mass: f32,
     pub affine_momentum_matrix: Mat2,
     pub material_type: MaterialType,
-    pub grid_index: u32,
 
     // Deformation tracking for future material models
     pub deformation_gradient: Mat2, // F matrix - tracks material deformation
@@ -36,7 +35,6 @@ impl Particle {
             mass: 1.0,
             affine_momentum_matrix: Mat2::ZERO,
             material_type,
-            grid_index: 0,
             deformation_gradient: Mat2::IDENTITY,
             velocity_gradient: Mat2::ZERO,
             failed: false,
@@ -52,7 +50,6 @@ impl Particle {
             mass: 1.0,
             affine_momentum_matrix: Mat2::ZERO,
             material_type,
-            grid_index: 0,
             deformation_gradient: Mat2::IDENTITY,
             velocity_gradient: Mat2::ZERO,
             failed: false,
@@ -80,7 +77,6 @@ impl Particle {
             mass: volume * density,
             affine_momentum_matrix: Mat2::ZERO,
             material_type: MaterialType::water(),
-            grid_index: 0,
             deformation_gradient: Mat2::IDENTITY,
             velocity_gradient: Mat2::ZERO,
             failed: false,
@@ -134,13 +130,6 @@ impl Particle {
         self.deformation_gradient.determinant()
     }
 
-    #[inline(always)]
-    pub fn calculate_grid_index(&self) -> u32 {
-        let grid_x = (self.position.x as u32).min(GRID_RESOLUTION as u32 - 1);
-        let grid_y = (self.position.y as u32).min(GRID_RESOLUTION as u32 - 1);
-        grid_y * GRID_RESOLUTION as u32 + grid_x
-    }
-
     /// Check if particle should be marked as failed due to numerical instability
     #[inline(always)]
     pub fn update_health(&mut self) {
@@ -187,10 +176,9 @@ impl Particle {
 }
 
 // System to update grid indices for spatial sorting
-pub fn update_particle_grid_indices(mut particles: Query<&mut Particle>) {
-    particles.par_iter_mut().for_each(|mut particle| {
-        particle.grid_index = particle.calculate_grid_index();
-    });
+pub fn update_particle_grid_indices(_particles: Query<&mut Particle>) {
+    // Grid indexing removed - using coordinate-native sparse grid access
+    // This system is now a no-op but kept for API compatibility
 }
 
 // System to update particle health and mark failed particles

@@ -57,34 +57,24 @@ impl Grid {
         }
     }
 
-    /// Get cell at grid coordinates, creating if needed
-    pub fn get_cell_mut(&mut self, x: i32, y: i32) -> &mut Cell {
+    /// Get cell at coordinates (read-only)
+    pub fn get_cell_coord(&self, coord: IVec2) -> Option<&Cell> {
+        self.cells.get(&(coord.x, coord.y))
+    }
+
+    /// Get cell at coordinates, creating if needed
+    pub fn get_cell_coord_mut(&mut self, coord: IVec2) -> &mut Cell {
         // Update bounds
         if let Some((min, max)) = &mut self.active_bounds {
-            min.x = min.x.min(x);
-            min.y = min.y.min(y);
-            max.x = max.x.max(x);
-            max.y = max.y.max(y);
+            min.x = min.x.min(coord.x);
+            min.y = min.y.min(coord.y);
+            max.x = max.x.max(coord.x);
+            max.y = max.y.max(coord.y);
         } else {
-            self.active_bounds = Some((IVec2::new(x, y), IVec2::new(x, y)));
+            self.active_bounds = Some((coord, coord));
         }
 
-        self.cells.entry((x, y)).or_insert_with(Cell::zeroed)
-    }
-
-    /// Get cell at grid coordinates (read-only)
-    pub fn get_cell(&self, x: i32, y: i32) -> Option<&Cell> {
-        self.cells.get(&(x, y))
-    }
-
-    /// Direct access using IVec2 coordinates (native sparse interface)
-    pub fn get_cell_coord(&self, coord: IVec2) -> Option<&Cell> {
-        self.get_cell(coord.x, coord.y)
-    }
-
-    /// Mutable direct access using IVec2 coordinates (native sparse interface)
-    pub fn get_cell_coord_mut(&mut self, coord: IVec2) -> &mut Cell {
-        self.get_cell_mut(coord.x, coord.y)
+        self.cells.entry((coord.x, coord.y)).or_insert_with(Cell::zeroed)
     }
 
 
