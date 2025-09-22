@@ -14,22 +14,18 @@ use crate::materials::MaterialType;
 
 pub fn particle_to_grid_mass_velocity(query: Query<&Particle>, mut grid: ResMut<Grid>) {
     for particle in &query {
-        // Compute all interpolation data once
+        // Native coordinate-based interpolation (no linear indices)
         let interp = GridInterpolation::compute_for_particle(particle.position);
 
-        for (neighbor_idx, (&neighbor_linear_index, &cell_distance)) in
-            interp.neighbor_indices.iter().zip(&interp.cell_distances).enumerate() {
-            if let Some(linear_index) = neighbor_linear_index {
-                let weight = interp.weight_for_neighbor(neighbor_idx);
-                let q = particle.affine_momentum_matrix * cell_distance;
+        // Direct coordinate iteration - no conversions needed
+        for (coord, weight, cell_distance) in interp.iter_neighbors() {
+            let q = particle.affine_momentum_matrix * cell_distance;
+            let mass_contribution = weight * particle.mass;
 
-                let mass_contribution = weight * particle.mass;
-
-                if let Some(cell) = grid.cells.get_mut(linear_index) {
-                    cell.mass += mass_contribution;
-                    cell.velocity += mass_contribution * (particle.velocity + q);
-                }
-            }
+            // Direct coordinate access to sparse grid
+            let cell = grid.get_cell_coord_mut(coord);
+            cell.mass += mass_contribution;
+            cell.velocity += mass_contribution * (particle.velocity + q);
         }
     }
 }
@@ -41,18 +37,14 @@ pub fn particle_to_grid_forces(
     mut grid: ResMut<Grid>,
 ) {
     for particle in &mut particles {
-        // Unified interpolation computation
+        // Native coordinate-based interpolation
         let interp = GridInterpolation::compute_for_particle(particle.position);
 
+        // Density calculation with direct coordinate access
         let mut density = 0.0;
-
-        for (neighbor_idx, &neighbor_linear_index) in interp.neighbor_indices.iter().enumerate() {
-            if let Some(linear_index) = neighbor_linear_index {
-                let weight = interp.weight_for_neighbor(neighbor_idx);
-
-                if let Some(cell) = grid.cells.get(linear_index) {
-                    density += cell.mass * weight;
-                }
+        for (coord, weight, _) in interp.iter_neighbors() {
+            if let Some(cell) = grid.get_cell_coord(coord) {
+                density += cell.mass * weight;
             }
         }
 
@@ -61,7 +53,6 @@ pub fn particle_to_grid_forces(
         // Calculate stress based on material type
         let stress = match &particle.material_type {
             MaterialType::Water { .. } => {
-                // Use organized water material function
                 materials::fluids::water::calculate_stress(
                     &particle,
                     density,
@@ -72,20 +63,13 @@ pub fn particle_to_grid_forces(
             }
         };
 
-        // Use current working stress-force method for now (keep fluids working)
+        // Force application with direct coordinate access
         let eq_16_term_0 = -volume * stress * time.delta_secs();
 
-        for (neighbor_idx, (&neighbor_linear_index, &cell_distance)) in
-            interp.neighbor_indices.iter().zip(&interp.cell_distances).enumerate() {
-            if let Some(linear_index) = neighbor_linear_index {
-                let weight = interp.weight_for_neighbor(neighbor_idx);
-
-                if let Some(cell) = grid.cells.get_mut(linear_index) {
-                    // Traditional force-based approach (working for fluids)
-                    let momentum = eq_16_term_0 * weight * cell_distance;
-                    cell.velocity += momentum;
-                }
-            }
+        for (coord, weight, cell_distance) in interp.iter_neighbors() {
+            let cell = grid.get_cell_coord_mut(coord);
+            let momentum = eq_16_term_0 * weight * cell_distance;
+            cell.velocity += momentum;
         }
     }
 }

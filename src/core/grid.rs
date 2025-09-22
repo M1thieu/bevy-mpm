@@ -4,6 +4,7 @@
 
 use bevy::prelude::*;
 use crate::materials::utils;
+use std::collections::HashMap;
 
 /// Grid dimensions (128x128 cells)
 pub const GRID_RESOLUTION: usize = 128;
@@ -12,21 +13,13 @@ pub const NEIGHBOR_COUNT: usize = 9;
 /// MPM kernel size (3x3 B-spline)
 pub const KERNEL_SIZE: usize = 3;
 
-// Pre-computed neighbor offsets for 3x3 grid pattern (performance optimization)
-pub const NEIGHBOR_OFFSETS: [i32; NEIGHBOR_COUNT] = [
-    -(GRID_RESOLUTION as i32) - 1,
-    -(GRID_RESOLUTION as i32),
-    -(GRID_RESOLUTION as i32) + 1, // Top row
-    -1,
-    0,
-    1, // Middle row
-    (GRID_RESOLUTION as i32) - 1,
-    GRID_RESOLUTION as i32,
-    (GRID_RESOLUTION as i32) + 1, // Bottom row
+// Native coordinate offsets for 3x3 B-spline kernel
+pub const COORD_OFFSETS: [IVec2; NEIGHBOR_COUNT] = [
+    IVec2::new(-1, -1), IVec2::new(0, -1), IVec2::new(1, -1), // Top row
+    IVec2::new(-1,  0), IVec2::new(0,  0), IVec2::new(1,  0), // Middle row
+    IVec2::new(-1,  1), IVec2::new(0,  1), IVec2::new(1,  1), // Bottom row
 ];
 
-// Const generic version for compile-time optimization
-pub type GridArray<T> = [T; GRID_RESOLUTION * GRID_RESOLUTION];
 
 #[derive(Component, Clone)]
 pub struct Cell {
@@ -52,7 +45,92 @@ impl Cell {
 
 #[derive(Resource)]
 pub struct Grid {
-    pub cells: Vec<Cell>,
+    cells: HashMap<(i32, i32), Cell>,
+    active_bounds: Option<(IVec2, IVec2)>, // min, max for optimization
+}
+
+impl Grid {
+    pub fn new() -> Self {
+        Self {
+            cells: HashMap::new(),
+            active_bounds: None,
+        }
+    }
+
+    /// Get cell at grid coordinates, creating if needed
+    pub fn get_cell_mut(&mut self, x: i32, y: i32) -> &mut Cell {
+        // Update bounds
+        if let Some((min, max)) = &mut self.active_bounds {
+            min.x = min.x.min(x);
+            min.y = min.y.min(y);
+            max.x = max.x.max(x);
+            max.y = max.y.max(y);
+        } else {
+            self.active_bounds = Some((IVec2::new(x, y), IVec2::new(x, y)));
+        }
+
+        self.cells.entry((x, y)).or_insert_with(Cell::zeroed)
+    }
+
+    /// Get cell at grid coordinates (read-only)
+    pub fn get_cell(&self, x: i32, y: i32) -> Option<&Cell> {
+        self.cells.get(&(x, y))
+    }
+
+    /// Direct access using IVec2 coordinates (native sparse interface)
+    pub fn get_cell_coord(&self, coord: IVec2) -> Option<&Cell> {
+        self.get_cell(coord.x, coord.y)
+    }
+
+    /// Mutable direct access using IVec2 coordinates (native sparse interface)
+    pub fn get_cell_coord_mut(&mut self, coord: IVec2) -> &mut Cell {
+        self.get_cell_mut(coord.x, coord.y)
+    }
+
+
+    /// Iterator over active cells (coordinates and cell data)
+    pub fn iter_active_cells(&self) -> impl Iterator<Item = ((i32, i32), &Cell)> {
+        self.cells.iter().map(|(&coords, cell)| (coords, cell))
+    }
+
+    /// Mutable iterator over active cells
+    pub fn iter_active_cells_mut(&mut self) -> impl Iterator<Item = ((i32, i32), &mut Cell)> {
+        self.cells.iter_mut().map(|(&coords, cell)| (coords, cell))
+    }
+
+    /// Zero all active cells
+    pub fn zero_active_cells(&mut self) {
+        for cell in self.cells.values_mut() {
+            cell.zero();
+        }
+    }
+
+    /// Get count of active cells
+    pub fn active_cell_count(&self) -> usize {
+        self.cells.len()
+    }
+
+    /// Clear empty cells (garbage collection)
+    pub fn cleanup_empty_cells(&mut self) {
+        self.cells.retain(|_, cell| cell.mass > 0.0);
+
+        // Recalculate bounds
+        if self.cells.is_empty() {
+            self.active_bounds = None;
+        } else {
+            let mut min = IVec2::new(i32::MAX, i32::MAX);
+            let mut max = IVec2::new(i32::MIN, i32::MIN);
+
+            for &(x, y) in self.cells.keys() {
+                min.x = min.x.min(x);
+                min.y = min.y.min(y);
+                max.x = max.x.max(x);
+                max.y = max.y.max(y);
+            }
+
+            self.active_bounds = Some((min, max));
+        }
+    }
 }
 
 // Fast B-spline weight calculation using optimized math
@@ -67,20 +145,27 @@ fn calculate_bspline_weight(d: f32) -> [f32; 3] {
     ]
 }
 
-/// Unified grid interpolation data - computes once, reuses everywhere
+/// Native coordinate-based grid interpolation - no linear indices anywhere
 pub struct GridInterpolation {
-    pub cell_index: UVec2,
-    pub weights: [Vec2; 3],
-    pub neighbor_indices: [Option<usize>; NEIGHBOR_COUNT],
-    pub cell_distances: [Vec2; NEIGHBOR_COUNT],
+    pub base_cell: IVec2,           // Base cell coordinates (i32 for negative bounds)
+    pub weights: [Vec2; 3],         // B-spline weights [x, y] for 3x3 kernel
+    pub neighbor_coords: [IVec2; NEIGHBOR_COUNT], // Direct coordinate access
+    pub cell_distances: [Vec2; NEIGHBOR_COUNT],   // Distance vectors for APIC
 }
 
 impl GridInterpolation {
-    /// Create complete interpolation data for a particle position
+    /// Native coordinate-based interpolation - no linear indices anywhere
     #[inline(always)]
     pub fn compute_for_particle(particle_position: Vec2) -> Self {
-        let cell_index = particle_position.as_uvec2();
-        let cell_difference = (particle_position - cell_index.as_vec2()) - 0.5;
+        // Base cell (bottom-left of 3x3 kernel) using i32 for potential negative coords
+        let base_cell = IVec2::new(
+            particle_position.x.floor() as i32 - 1,
+            particle_position.y.floor() as i32 - 1,
+        );
+
+        // Cell difference for B-spline weights (relative to base+1)
+        let center_cell = base_cell + IVec2::ONE;
+        let cell_difference = particle_position - center_cell.as_vec2() - 0.5;
 
         let x_weights = calculate_bspline_weight(cell_difference.x);
         let y_weights = calculate_bspline_weight(cell_difference.y);
@@ -91,113 +176,87 @@ impl GridInterpolation {
             Vec2::new(x_weights[2], y_weights[2]),
         ];
 
-        // Compute all neighbor data once
-        let center_linear_index = cell_index.y as usize * GRID_RESOLUTION + cell_index.x as usize;
-        let neighbor_indices = get_neighbor_indices(center_linear_index);
-        let cell_distances = calculate_neighbor_distances(particle_position, cell_index);
+        // Generate 3x3 neighbor coordinates directly (no linear indices)
+        let mut neighbor_coords = [IVec2::ZERO; NEIGHBOR_COUNT];
+        let mut cell_distances = [Vec2::ZERO; NEIGHBOR_COUNT];
+
+        for gy in 0..3 {
+            for gx in 0..3 {
+                let idx = gy * 3 + gx;
+                let coord = base_cell + IVec2::new(gx as i32, gy as i32);
+                neighbor_coords[idx] = coord;
+                cell_distances[idx] = (coord.as_vec2() - particle_position) + 0.5;
+            }
+        }
 
         Self {
-            cell_index,
+            base_cell,
             weights,
-            neighbor_indices,
+            neighbor_coords,
             cell_distances,
         }
     }
 
-    /// Get interpolation weight for a specific neighbor
+    /// Get interpolation weight for a specific neighbor (coordinate-based)
     #[inline(always)]
     pub fn weight_for_neighbor(&self, neighbor_idx: usize) -> f32 {
         let gx = neighbor_idx % KERNEL_SIZE;
         let gy = neighbor_idx / KERNEL_SIZE;
         self.weights[gx].x * self.weights[gy].y
     }
-}
 
-// Legacy API for backward compatibility - will be deprecated
-#[inline(always)]
-pub fn calculate_grid_weights(particle_position: Vec2) -> (UVec2, [Vec2; 3]) {
-    let interp = GridInterpolation::compute_for_particle(particle_position);
-    (interp.cell_index, interp.weights)
-}
+    /// Get coordinate for a specific neighbor (main interface for grid access)
+    #[inline(always)]
+    pub fn neighbor_coord(&self, neighbor_idx: usize) -> IVec2 {
+        self.neighbor_coords[neighbor_idx]
+    }
 
-
-// Bounds checking with early exit
-#[inline(always)]
-pub fn is_valid_grid_position(pos: UVec2) -> bool {
-    pos.x < GRID_RESOLUTION as u32 && pos.y < GRID_RESOLUTION as u32
-}
-
-// Fast grid index calculation with bounds check
-#[inline(always)]
-pub fn safe_grid_index(pos: UVec2) -> Option<usize> {
-    if is_valid_grid_position(pos) {
-        Some(pos.y as usize * GRID_RESOLUTION + pos.x as usize)
-    } else {
-        None
+    /// Iterator over (coordinate, weight, distance) tuples for efficient processing
+    #[inline(always)]
+    pub fn iter_neighbors(&self) -> impl Iterator<Item = (IVec2, f32, Vec2)> + '_ {
+        (0..NEIGHBOR_COUNT).map(move |idx| {
+            (
+                self.neighbor_coords[idx],
+                self.weight_for_neighbor(idx),
+                self.cell_distances[idx],
+            )
+        })
     }
 }
 
-// Check if entire 3x3 neighborhood around a center index is valid (batch validation)
+// Native coordinate-based API - replaces old calculate_grid_weights
 #[inline(always)]
-pub fn is_neighborhood_valid(center_index: usize) -> bool {
-    for &offset in NEIGHBOR_OFFSETS.iter() {
-        let neighbor_index = center_index as i32 + offset;
-        if neighbor_index < 0 || neighbor_index >= (GRID_RESOLUTION * GRID_RESOLUTION) as i32 {
-            return false;
-        }
+pub fn calculate_grid_interpolation(particle_position: Vec2) -> GridInterpolation {
+    GridInterpolation::compute_for_particle(particle_position)
+}
 
-        // Check for grid edge wrapping
-        let center_x = center_index % GRID_RESOLUTION;
-        let center_y = center_index / GRID_RESOLUTION;
-        let neighbor_x = (neighbor_index as usize) % GRID_RESOLUTION;
-        let neighbor_y = (neighbor_index as usize) / GRID_RESOLUTION;
 
-        if (center_x as i32 - neighbor_x as i32).abs() > 1
-            || (center_y as i32 - neighbor_y as i32).abs() > 1
-        {
-            return false;
+// Native coordinate-based bounds checking (sparse grid compatible)
+#[inline(always)]
+pub fn is_valid_grid_coord(coord: IVec2) -> bool {
+    coord.x >= 0 && coord.x < GRID_RESOLUTION as i32
+    && coord.y >= 0 && coord.y < GRID_RESOLUTION as i32
+}
+
+// Coordinate-based neighborhood validation (for boundary conditions)
+#[inline(always)]
+pub fn is_coord_neighborhood_safe(center: IVec2) -> bool {
+    // Check if all 3x3 neighbors are within grid bounds
+    for dy in -1..=1 {
+        for dx in -1..=1 {
+            let neighbor = center + IVec2::new(dx, dy);
+            if !is_valid_grid_coord(neighbor) {
+                return false;
+            }
         }
     }
     true
 }
 
-// Get neighbor indices using pre-computed offsets with batch validation
-#[inline(always)]
-pub fn get_neighbor_indices(center_index: usize) -> [Option<usize>; NEIGHBOR_COUNT] {
-    let mut neighbors = [None; NEIGHBOR_COUNT];
-
-    // Early exit if entire neighborhood is invalid (batch validation)
-    if !is_neighborhood_valid(center_index) {
-        return neighbors;
-    }
-
-    // All neighbors are guaranteed valid, compute directly
-    for (i, &offset) in NEIGHBOR_OFFSETS.iter().enumerate() {
-        let neighbor_index = (center_index as i32 + offset) as usize;
-        neighbors[i] = Some(neighbor_index);
-    }
-
-    neighbors
-}
-
-// Pre-compute cell distances for all neighbors (shared by P2G and G2P)
-#[inline(always)]
-pub fn calculate_neighbor_distances(particle_position: Vec2, cell_index: UVec2) -> [Vec2; NEIGHBOR_COUNT] {
-    let mut cell_distances = [Vec2::ZERO; NEIGHBOR_COUNT];
-    
-    for neighbor_idx in 0..NEIGHBOR_COUNT {
-        let gx = neighbor_idx % KERNEL_SIZE;
-        let gy = neighbor_idx / KERNEL_SIZE;
-        let cell_position = UVec2::new(cell_index.x + gx as u32 - 1, cell_index.y + gy as u32 - 1);
-        cell_distances[neighbor_idx] = (cell_position.as_vec2() - particle_position) + 0.5;
-    }
-    
-    cell_distances
-}
 
 #[inline(always)]
 pub fn zero_grid(mut grid: ResMut<Grid>) {
-    grid.cells.iter_mut().for_each(|cell| cell.zero());
+    grid.zero_active_cells();
 }
 
 // Boundary handling modes
@@ -208,55 +267,51 @@ pub enum BoundaryHandling {
     None,  // No boundary (open world)
 }
 
-// Flexible boundary system for open-world compatibility
+// Native coordinate-based boundary system (sparse grid compatible)
 #[inline(always)]
 pub fn calculate_grid_velocities(time: Res<Time>, mut grid: ResMut<Grid>, gravity: Vec2) {
-    for (index, cell) in grid.cells.iter_mut().enumerate() {
+    for (coords, cell) in grid.iter_active_cells_mut() {
         if cell.mass > 0.0 {
             let gravity_velocity = time.delta_secs() * gravity;
             cell.velocity *= utils::inv_exact(cell.mass);
             cell.velocity += gravity_velocity;
 
-            // Apply configurable boundary handling
-            apply_boundary_conditions(cell, index, BoundaryHandling::Slip);
+            // Native coordinate-based boundary checking (no conversions)
+            let coord = IVec2::new(coords.0, coords.1);
+            apply_boundary_conditions_coord(cell, coord, BoundaryHandling::Slip);
         }
     }
 }
 
-// Configurable boundary conditions system
+// Native coordinate-based boundary conditions (eliminates conversions)
 #[inline(always)]
-fn apply_boundary_conditions(cell: &mut Cell, index: usize, boundary_type: BoundaryHandling) {
-    let y = index / GRID_RESOLUTION;
-    let x = index % GRID_RESOLUTION;
-
-    // Check if we're near boundaries (configurable for open world)
-    let near_boundary = x < 2 || x > GRID_RESOLUTION - 3 || y < 2 || y > GRID_RESOLUTION - 3;
+fn apply_boundary_conditions_coord(cell: &mut Cell, coord: IVec2, boundary_type: BoundaryHandling) {
+    // Check if we're near boundaries (coordinate-native)
+    let near_boundary = coord.x < 2 || coord.x > GRID_RESOLUTION as i32 - 3
+        || coord.y < 2 || coord.y > GRID_RESOLUTION as i32 - 3;
 
     if near_boundary {
         match boundary_type {
             BoundaryHandling::Stick => {
-                // Old behavior - sticky walls
-                if x < 2 || x > GRID_RESOLUTION - 3 {
+                // Sticky walls
+                if coord.x < 2 || coord.x > GRID_RESOLUTION as i32 - 3 {
                     cell.velocity.x = 0.0;
                 }
-                if y < 2 || y > GRID_RESOLUTION - 3 {
+                if coord.y < 2 || coord.y > GRID_RESOLUTION as i32 - 3 {
                     cell.velocity.y = 0.0;
                 }
             }
             BoundaryHandling::Slip => {
                 // Realistic sliding behavior
-                if x < 2 || x > GRID_RESOLUTION - 3 {
-                    // Allow sliding along vertical walls (keep Y velocity)
-                    cell.velocity.x = 0.0;
+                if coord.x < 2 || coord.x > GRID_RESOLUTION as i32 - 3 {
+                    cell.velocity.x = 0.0; // Allow Y sliding
                 }
-                if y < 2 || y > GRID_RESOLUTION - 3 {
-                    // Allow sliding along horizontal walls (keep X velocity)
-                    cell.velocity.y = 0.0;
+                if coord.y < 2 || coord.y > GRID_RESOLUTION as i32 - 3 {
+                    cell.velocity.y = 0.0; // Allow X sliding
                 }
             }
             BoundaryHandling::None => {
-                // Open world - no boundaries (particles can flow out)
-                // Do nothing - let particles flow freely
+                // Open world - no boundaries (particles flow freely)
             }
         }
     }

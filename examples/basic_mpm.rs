@@ -6,8 +6,8 @@ use mpm2d::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_
 use mpm2d::{Cell, GRAVITY, GRID_RESOLUTION, Grid, MaterialType, Particle, SolverParams};
 use rand::Rng;
 
-fn init_grid(mut grid: ResMut<Grid>) {
-    grid.cells = vec![Cell::zeroed(); GRID_RESOLUTION * GRID_RESOLUTION];
+fn init_grid(_grid: ResMut<Grid>) {
+    // Grid is now automatically initialized as sparse HashMap - no setup needed
 }
 
 fn init_particles(
@@ -128,6 +128,17 @@ fn update_particle_transforms(mut query: Query<(&mut Transform, &Particle)>) {
 }
 
 fn calculate_grid_velocities_wrapper(time: Res<Time>, grid: ResMut<Grid>) {
+    let active_cells = grid.active_cell_count();
+    let total_grid_cells = GRID_RESOLUTION * GRID_RESOLUTION;
+    let memory_efficiency = 100.0 * (1.0 - active_cells as f32 / total_grid_cells as f32);
+
+    if active_cells > 0 {
+        println!(
+            "Sparse Grid Stats: {}/{} cells active ({:.1}% memory saved)",
+            active_cells, total_grid_cells, memory_efficiency
+        );
+    }
+
     calculate_grid_velocities(time, grid, GRAVITY);
 }
 
@@ -135,7 +146,7 @@ pub struct MpmPlugin;
 
 impl Plugin for MpmPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Grid { cells: Vec::new() });
+        app.insert_resource(Grid::new());
         app.insert_resource(SolverParams::default());
         app.insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(
             1.0 / 60.0,

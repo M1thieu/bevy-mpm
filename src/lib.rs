@@ -55,9 +55,7 @@ impl MpmPlugin {
 
 impl Plugin for MpmPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Grid {
-            cells: vec![Cell::zeroed(); GRID_RESOLUTION * GRID_RESOLUTION],
-        });
+        app.insert_resource(Grid::new());
 
         if let Some(params) = &self.solver_params {
             app.insert_resource(params.clone());

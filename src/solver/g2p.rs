@@ -8,38 +8,34 @@ use bevy::prelude::*;
 use crate::core::Particle;
 use crate::core::{GRID_RESOLUTION, Grid, GridInterpolation};
 
-/// Implements proper affine matrix update using outer product
+/// Native coordinate-based G2P transfer (eliminates linear index conversions)
 pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: Res<Grid>) {
     for mut particle in &mut query {
         particle.velocity = Vec2::ZERO;
 
-        // Unified interpolation in G2P
+        // Native coordinate-based interpolation
         let interp = GridInterpolation::compute_for_particle(particle.position);
 
         let mut b = Mat2::ZERO;
 
-        for (neighbor_idx, (&neighbor_linear_index, &cell_distance)) in
-            interp.neighbor_indices.iter().zip(&interp.cell_distances).enumerate() {
-            if let Some(linear_index) = neighbor_linear_index {
-                let weight = interp.weight_for_neighbor(neighbor_idx);
+        // Direct coordinate iteration - no conversions anywhere
+        for (coord, weight, cell_distance) in interp.iter_neighbors() {
+            if let Some(cell) = grid.get_cell_coord(coord) {
+                let weighted_velocity = cell.velocity * weight;
 
-                if let Some(cell) = grid.cells.get(linear_index) {
-                    let weighted_velocity = cell.velocity * weight;
+                let term = Mat2::from_cols(
+                    Vec2::new(
+                        weighted_velocity.x * cell_distance.x,
+                        weighted_velocity.y * cell_distance.x,
+                    ),
+                    Vec2::new(
+                        weighted_velocity.x * cell_distance.y,
+                        weighted_velocity.y * cell_distance.y,
+                    ),
+                );
 
-                    let term = Mat2::from_cols(
-                        Vec2::new(
-                            weighted_velocity.x * cell_distance.x,
-                            weighted_velocity.y * cell_distance.x,
-                        ),
-                        Vec2::new(
-                            weighted_velocity.x * cell_distance.y,
-                            weighted_velocity.y * cell_distance.y,
-                        ),
-                    );
-
-                    b += term;
-                    particle.velocity += weighted_velocity;
-                }
+                b += term;
+                particle.velocity += weighted_velocity;
             }
         }
 

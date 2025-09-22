@@ -1,7 +1,7 @@
 use std::time::Instant;
 use bevy::prelude::*;
-use crate::grid::{Grid, GRID_RESOLUTION};
-use crate::solver::Particle;
+use crate::core::{Grid, GRID_RESOLUTION};
+use crate::core::Particle;
 
 /// Configuration for the bukkit system
 #[derive(Resource, Clone)]
@@ -52,7 +52,7 @@ pub struct BukkitSystem {
     pub count_x: usize,
     pub count_y: usize,
     pub particle_indices: Vec<Vec<Entity>>,
-    pub active_grid_cells: Vec<usize>,
+    pub active_grid_coords: Vec<(i32, i32)>,
     pub thread_data: Vec<BukkitThreadData>,
     pub particle_counts: Vec<usize>,           // Count per bukkit
     pub allocated_indices: Vec<Entity>,         // Pre-allocated contiguous buffer
@@ -68,7 +68,7 @@ impl BukkitSystem {
             count_x,
             count_y,
             particle_indices: vec![Vec::with_capacity(config.capacity_hint); total_bukkits],
-            active_grid_cells: Vec::with_capacity(GRID_RESOLUTION * GRID_RESOLUTION / 4),
+            active_grid_coords: Vec::with_capacity(GRID_RESOLUTION * GRID_RESOLUTION / 4),
             thread_data: Vec::with_capacity(total_bukkits),
             particle_counts: vec![0; total_bukkits],
             allocated_indices: Vec::new(),
@@ -76,8 +76,8 @@ impl BukkitSystem {
     }
     
     #[inline]
-    pub fn mark_grid_cell_active(&mut self, cell_idx: usize) {
-        self.active_grid_cells.push(cell_idx);
+    pub fn mark_grid_coord_active(&mut self, coord: (i32, i32)) {
+        self.active_grid_coords.push(coord);
     }
     
     pub fn get_grid_range(&self, bukkit_idx: usize, config: &BukkitConfig) -> (usize, usize, usize, usize) {
