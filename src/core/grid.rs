@@ -2,8 +2,8 @@
 //!
 //! 128x128 grid with 3x3 B-spline interpolation.
 
-use bevy::prelude::*;
 use crate::materials::utils;
+use bevy::prelude::*;
 use std::collections::HashMap;
 
 /// Grid dimensions (128x128 cells)
@@ -15,11 +15,16 @@ pub const KERNEL_SIZE: usize = 3;
 
 // Native coordinate offsets for 3x3 B-spline kernel
 pub const COORD_OFFSETS: [IVec2; NEIGHBOR_COUNT] = [
-    IVec2::new(-1, -1), IVec2::new(0, -1), IVec2::new(1, -1), // Top row
-    IVec2::new(-1,  0), IVec2::new(0,  0), IVec2::new(1,  0), // Middle row
-    IVec2::new(-1,  1), IVec2::new(0,  1), IVec2::new(1,  1), // Bottom row
+    IVec2::new(-1, -1),
+    IVec2::new(0, -1),
+    IVec2::new(1, -1), // Top row
+    IVec2::new(-1, 0),
+    IVec2::new(0, 0),
+    IVec2::new(1, 0), // Middle row
+    IVec2::new(-1, 1),
+    IVec2::new(0, 1),
+    IVec2::new(1, 1), // Bottom row
 ];
-
 
 #[derive(Component, Clone)]
 pub struct Cell {
@@ -74,9 +79,10 @@ impl Grid {
             self.active_bounds = Some((coord, coord));
         }
 
-        self.cells.entry((coord.x, coord.y)).or_insert_with(Cell::zeroed)
+        self.cells
+            .entry((coord.x, coord.y))
+            .or_insert_with(Cell::zeroed)
     }
-
 
     /// Iterator over active cells (coordinates and cell data)
     pub fn iter_active_cells(&self) -> impl Iterator<Item = ((i32, i32), &Cell)> {
@@ -137,10 +143,10 @@ fn calculate_bspline_weight(d: f32) -> [f32; 3] {
 
 /// Native coordinate-based grid interpolation - no linear indices anywhere
 pub struct GridInterpolation {
-    pub base_cell: IVec2,           // Base cell coordinates (i32 for negative bounds)
-    pub weights: [Vec2; 3],         // B-spline weights [x, y] for 3x3 kernel
+    pub base_cell: IVec2,   // Base cell coordinates (i32 for negative bounds)
+    pub weights: [Vec2; 3], // B-spline weights [x, y] for 3x3 kernel
     pub neighbor_coords: [IVec2; NEIGHBOR_COUNT], // Direct coordinate access
-    pub cell_distances: [Vec2; NEIGHBOR_COUNT],   // Distance vectors for APIC
+    pub cell_distances: [Vec2; NEIGHBOR_COUNT], // Distance vectors for APIC
 }
 
 impl GridInterpolation {
@@ -220,12 +226,13 @@ pub fn calculate_grid_interpolation(particle_position: Vec2) -> GridInterpolatio
     GridInterpolation::compute_for_particle(particle_position)
 }
 
-
 // Native coordinate-based bounds checking (sparse grid compatible)
 #[inline(always)]
 pub fn is_valid_grid_coord(coord: IVec2) -> bool {
-    coord.x >= 0 && coord.x < GRID_RESOLUTION as i32
-    && coord.y >= 0 && coord.y < GRID_RESOLUTION as i32
+    coord.x >= 0
+        && coord.x < GRID_RESOLUTION as i32
+        && coord.y >= 0
+        && coord.y < GRID_RESOLUTION as i32
 }
 
 // Coordinate-based neighborhood validation (for boundary conditions)
@@ -242,7 +249,6 @@ pub fn is_coord_neighborhood_safe(center: IVec2) -> bool {
     }
     true
 }
-
 
 #[inline(always)]
 pub fn zero_grid(mut grid: ResMut<Grid>) {
@@ -277,8 +283,10 @@ pub fn calculate_grid_velocities(time: Res<Time>, mut grid: ResMut<Grid>, gravit
 #[inline(always)]
 fn apply_boundary_conditions_coord(cell: &mut Cell, coord: IVec2, boundary_type: BoundaryHandling) {
     // Check if we're near boundaries (coordinate-native)
-    let near_boundary = coord.x < 2 || coord.x > GRID_RESOLUTION as i32 - 3
-        || coord.y < 2 || coord.y > GRID_RESOLUTION as i32 - 3;
+    let near_boundary = coord.x < 2
+        || coord.x > GRID_RESOLUTION as i32 - 3
+        || coord.y < 2
+        || coord.y > GRID_RESOLUTION as i32 - 3;
 
     if near_boundary {
         match boundary_type {

@@ -62,7 +62,6 @@ pub mod physics {
         lambda + 2.0 * mu / 3.0
     }
 
-
     /// Extracts the strain rate (symmetric) part of velocity gradient
     #[inline]
     pub fn strain_rate(velocity_gradient: &Mat2) -> Mat2 {

@@ -19,7 +19,7 @@ impl Default for SolverParams {
         Self {
             preserve_fluid_volume: true, // Enable by default for better water physics
             volume_correction_strength: 0.5, // Moderate correction strength
-            dynamic_viscosity: 0.1, // Default water viscosity
+            dynamic_viscosity: 0.1,      // Default water viscosity
         }
     }
 }

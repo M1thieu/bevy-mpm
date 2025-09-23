@@ -14,7 +14,7 @@ static ALLOCATED: AtomicUsize = AtomicUsize::new(0);
 
 unsafe impl GlobalAlloc for TrackingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let ret = System.alloc(layout);
+        let ret = unsafe { System.alloc(layout) };
         if !ret.is_null() {
             ALLOCATED.fetch_add(layout.size(), Ordering::SeqCst);
         }
@@ -22,7 +22,7 @@ unsafe impl GlobalAlloc for TrackingAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        System.dealloc(ptr, layout);
+        unsafe { System.dealloc(ptr, layout) };
         ALLOCATED.fetch_sub(layout.size(), Ordering::SeqCst);
     }
 }
@@ -34,28 +34,12 @@ fn get_memory_usage() -> usize {
     ALLOCATED.load(Ordering::SeqCst)
 }
 
-fn reset_memory_tracking() {
-    // We can't truly reset, but we can get a baseline
-}
-
 fn create_test_particles(commands: &mut Commands) {
     // Create same particle setup as basic example
     for x in 0..50 {
         for y in 0..100 {
             let position = Vec2::new(x as f32 + 55.0, y as f32 + 20.0);
-            commands.spawn(Particle {
-                position,
-                velocity: Vec2::ZERO,
-                mass: 1.0,
-                volume: 1.0,
-                material_type: MaterialType::Water {
-                    rest_density: 1000.0,
-                    bulk_modulus: 2000.0,
-                },
-                deformation_gradient: Mat2::IDENTITY,
-                velocity_gradient: Mat2::ZERO,
-                affine_momentum_matrix: Mat2::ZERO,
-            });
+            commands.spawn(Particle::new(position, MaterialType::water()));
         }
     }
 }
@@ -63,7 +47,7 @@ fn create_test_particles(commands: &mut Commands) {
 fn memory_benchmark_system(
     mut commands: Commands,
     grid: ResMut<Grid>,
-    particles: Query<&Particle>,
+    _particles: Query<&Particle>,
     mut frame_count: Local<u32>,
 ) {
     *frame_count += 1;
@@ -81,7 +65,10 @@ fn memory_benchmark_system(
 
         println!("Memory after 10 frames: {} KB", active_memory / 1024);
         println!("Active cells: {}/{}", active_cells, total_cells);
-        println!("Estimated dense grid memory: {} KB", (total_cells * 12) / 1024);
+        println!(
+            "Estimated dense grid memory: {} KB",
+            (total_cells * 12) / 1024
+        );
         println!("Estimated sparse overhead: HashMap buckets, keys, etc.");
 
         std::process::exit(0);
@@ -96,7 +83,9 @@ fn main() {
         .add_plugins(MinimalPlugins)
         .insert_resource(Grid::new())
         .insert_resource(SolverParams::default())
-        .insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(1.0 / 60.0)))
+        .insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(
+            1.0 / 60.0,
+        )))
         .add_systems(
             Update,
             (
@@ -108,7 +97,8 @@ fn main() {
                     calculate_grid_velocities(time, grid, GRAVITY);
                 },
                 grid_to_particle,
-            ).chain(),
+            )
+                .chain(),
         )
         .run();
 }

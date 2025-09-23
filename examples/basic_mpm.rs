@@ -3,7 +3,7 @@ use std::time::Duration;
 use bevy::prelude::*;
 use mpm2d::core::{calculate_grid_velocities, zero_grid};
 use mpm2d::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
-use mpm2d::{Cell, GRAVITY, GRID_RESOLUTION, Grid, MaterialType, Particle, SolverParams};
+use mpm2d::{Cell, GRAVITY, Grid, MaterialType, Particle, SolverParams};
 use rand::Rng;
 
 fn init_grid(_grid: ResMut<Grid>) {
@@ -128,17 +128,6 @@ fn update_particle_transforms(mut query: Query<(&mut Transform, &Particle)>) {
 }
 
 fn calculate_grid_velocities_wrapper(time: Res<Time>, grid: ResMut<Grid>) {
-    let active_cells = grid.active_cell_count();
-    let total_grid_cells = GRID_RESOLUTION * GRID_RESOLUTION;
-    let memory_efficiency = 100.0 * (1.0 - active_cells as f32 / total_grid_cells as f32);
-
-    if active_cells > 0 {
-        println!(
-            "Sparse Grid Stats: {}/{} cells active ({:.1}% memory saved)",
-            active_cells, total_grid_cells, memory_efficiency
-        );
-    }
-
     calculate_grid_velocities(time, grid, GRAVITY);
 }
 
