@@ -12,12 +12,12 @@ pub struct Particle {
     pub position: Vec2,
     pub velocity: Vec2,
     pub mass: f32,
-    pub affine_momentum_matrix: Mat2,
+    pub affine_momentum_matrix: Mat2, // MLS affine velocity field (C matrix)
     pub material_type: MaterialType,
 
     // Deformation tracking for future material models
     pub deformation_gradient: Mat2, // F matrix - tracks material deformation
-    pub velocity_gradient: Mat2,    // ∇v - velocity gradient for APIC and stress calculations
+    pub velocity_gradient: Mat2,    // ∇v derived from the MLS affine matrix
 
     // Particle health system
     pub failed: bool,          // Mark particle for removal
@@ -173,12 +173,6 @@ impl Particle {
             self.failed = true;
         }
     }
-}
-
-// System to update grid indices for spatial sorting
-pub fn update_particle_grid_indices(_particles: Query<&mut Particle>) {
-    // Grid indexing removed - using coordinate-native sparse grid access
-    // This system is now a no-op but kept for API compatibility
 }
 
 // System to update particle health and mark failed particles

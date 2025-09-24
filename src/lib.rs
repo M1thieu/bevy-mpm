@@ -1,4 +1,4 @@
-//! Material Point Method simulation for Bevy
+//! MLS-MPM (Moving Least Squares Material Point Method) simulation for Bevy
 //!
 //! ```rust
 //! use bevy::prelude::*;
@@ -20,7 +20,7 @@ pub use core::{Cell, GRID_RESOLUTION, Grid, Particle};
 pub use materials::MaterialType;
 
 use crate::core::{calculate_grid_velocities, zero_grid};
-use crate::core::{cleanup_failed_particles, update_particle_grid_indices, update_particle_health};
+use crate::core::{cleanup_failed_particles, update_particle_health};
 use crate::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
 
 pub struct MpmPlugin {
@@ -66,7 +66,6 @@ impl Plugin for MpmPlugin {
         app.add_systems(
             Update,
             (
-                update_particle_grid_indices,
                 update_particle_health,
                 zero_grid,
                 particle_to_grid_mass_velocity,

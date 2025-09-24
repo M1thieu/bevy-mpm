@@ -2,21 +2,10 @@
 //!
 //! Handles water pressure, viscosity, and EOS calculations.
 
-use crate::config::{EOS_POWER, EOS_STIFFNESS, K_WATER, REST_DENSITY};
+use crate::config::{EOS_POWER, EOS_STIFFNESS, REST_DENSITY};
 use crate::core::Particle;
 use crate::materials::utils;
 use bevy::prelude::*;
-
-/// Calculate constitutive model for water (original logic from simulation.rs)
-pub fn apply_constitutive_model(vp0: f32, jp: f32) -> f32 {
-    let djp = -K_WATER * (utils::inv_exact(jp.powi(3)) - 1.0);
-    djp * vp0 * jp
-}
-
-/// Update water deformation (original logic from simulation.rs)
-pub fn update_deformation(jp: &mut f32, velocity_gradient: Mat2, dt: f32) {
-    *jp = (1.0 + dt * (velocity_gradient.col(0).x + velocity_gradient.col(1).y)) * *jp;
-}
 
 /// Calculate water stress (original logic from P2G)
 pub fn calculate_stress(
@@ -49,7 +38,7 @@ pub fn calculate_stress(
     let stress = Mat2::IDENTITY * -total_pressure;
 
     // Add viscosity term (original logic)
-    let dudv = particle.affine_momentum_matrix;
+    let dudv = particle.velocity_gradient;
     let mut strain = dudv;
     let trace = strain.col(1).x + strain.col(0).y;
     strain.col_mut(0).y = trace;
@@ -57,22 +46,4 @@ pub fn calculate_stress(
     let viscosity_term = dynamic_viscosity * strain;
 
     stress + viscosity_term
-}
-
-pub mod types {
-    use crate::config::REST_DENSITY;
-    use crate::materials::MaterialProperties;
-
-    pub const WATER: MaterialProperties = MaterialProperties::fluid("water", REST_DENSITY);
-}
-
-/// Check if water material properties
-pub fn is_fluid() -> bool {
-    true
-}
-pub fn is_incompressible() -> bool {
-    true
-}
-pub fn target_density() -> f32 {
-    REST_DENSITY
 }

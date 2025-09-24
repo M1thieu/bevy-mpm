@@ -13,12 +13,12 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
     for mut particle in &mut query {
         particle.velocity = Vec2::ZERO;
 
-        // Native coordinate-based interpolation
+        // Native coordinate-based interpolation (MLS formulation)
         let interp = GridInterpolation::compute_for_particle(particle.position);
 
+        // B matrix from Jiang et al. 2015 (before multiplying with the fixed D^-1 factor)
         let mut b = Mat2::ZERO;
 
-        // Direct coordinate iteration - no conversions anywhere
         for (coord, weight, cell_distance) in interp.iter_neighbors() {
             if let Some(cell) = grid.get_cell_coord(coord) {
                 let weighted_velocity = cell.velocity * weight;
@@ -39,13 +39,16 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
             }
         }
 
-        particle.affine_momentum_matrix = b;
-        particle.velocity_gradient = b; // Store velocity gradient for P2G APIC
+        // MLS-MPM affine velocity field: C = 4 * B for quadratic B-spline basis
+        let affine_velocity = b * 4.0;
+        particle.affine_momentum_matrix = affine_velocity;
 
-        // Update deformation gradient: F_new = (I + dt * velocity_gradient) * F_old
+        // Store gradient for constitutive models and deformation tracking
+        particle.velocity_gradient = affine_velocity;
+
+        // Update deformation gradient: F_new = (I + dt * C) * F_old
         let dt = time.delta_secs();
-        let velocity_gradient = b;
-        let deformation_update = Mat2::IDENTITY + velocity_gradient * dt;
+        let deformation_update = Mat2::IDENTITY + affine_velocity * dt;
         particle.deformation_gradient = deformation_update * particle.deformation_gradient;
 
         let particle_velocity = particle.velocity;

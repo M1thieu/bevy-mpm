@@ -1,9 +1,10 @@
+// Minimal MLS-MPM example. Keeps the loop small so the new affine transfer is easy to inspect.
 use std::time::Duration;
 
 use bevy::prelude::*;
 use mpm2d::core::{calculate_grid_velocities, zero_grid};
 use mpm2d::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
-use mpm2d::{Cell, GRAVITY, Grid, MaterialType, Particle, SolverParams};
+use mpm2d::{GRAVITY, Grid, MaterialType, Particle, SolverParams};
 use rand::Rng;
 
 fn init_grid(_grid: ResMut<Grid>) {
@@ -141,6 +142,7 @@ impl Plugin for MpmPlugin {
             1.0 / 60.0,
         )));
         app.add_systems(Startup, (init_grid, init_particles).chain());
+        // Core MLS-MPM update loop: P2G → grid solve → G2P
         app.add_systems(
             FixedUpdate,
             (
