@@ -37,13 +37,11 @@ pub fn calculate_stress(
     let total_pressure = eos_pressure + volume_correction;
     let stress = Mat2::IDENTITY * -total_pressure;
 
-    // Add viscosity term (original logic)
-    let dudv = particle.velocity_gradient;
-    let mut strain = dudv;
-    let trace = strain.col(1).x + strain.col(0).y;
-    strain.col_mut(0).y = trace;
-    strain.col_mut(1).x = trace;
-    let viscosity_term = dynamic_viscosity * strain;
+    // Viscosity: deviatoric strain rate for incompressible flow
+    let strain_rate = (particle.velocity_gradient + particle.velocity_gradient.transpose()) * 0.5;
+    let trace = strain_rate.col(0).x + strain_rate.col(1).y;
+    let deviatoric_strain = strain_rate - Mat2::from_diagonal(Vec2::splat(trace * 0.5));
+    let viscosity_term = 2.0 * dynamic_viscosity * deviatoric_strain;
 
     stress + viscosity_term
 }

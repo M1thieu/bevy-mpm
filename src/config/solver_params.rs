@@ -17,9 +17,9 @@ pub struct SolverParams {
 impl Default for SolverParams {
     fn default() -> Self {
         Self {
-            preserve_fluid_volume: true, // Enable by default for better water physics
-            volume_correction_strength: 0.5, // Moderate correction strength
-            dynamic_viscosity: 0.1,      // Default water viscosity
+            preserve_fluid_volume: false, // EOS handles volume naturally
+            volume_correction_strength: 0.0,
+            dynamic_viscosity: 0.1,
         }
     }
 }

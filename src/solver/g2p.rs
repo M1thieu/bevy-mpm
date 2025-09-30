@@ -51,6 +51,14 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
         let deformation_update = Mat2::IDENTITY + affine_velocity * dt;
         particle.deformation_gradient = deformation_update * particle.deformation_gradient;
 
+        // Project F to hydrostatic for fluids
+        // In 2D: F = [[a,0],[0,a]] → det(F) = a², so a = J^0.25 gives det(F) = √J
+        if particle.material_type.is_fluid() {
+            let jacobian = particle.deformation_gradient.determinant();
+            let scale = jacobian.abs().powf(0.25);
+            particle.deformation_gradient = Mat2::IDENTITY * scale;
+        }
+
         let particle_velocity = particle.velocity;
 
         particle.position += particle_velocity * time.delta_secs();

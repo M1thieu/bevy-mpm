@@ -2,6 +2,7 @@
 use std::time::Duration;
 
 use bevy::prelude::*;
+use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use mpm2d::core::{calculate_grid_velocities, zero_grid};
 use mpm2d::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
 use mpm2d::{GRAVITY, Grid, MaterialType, Particle, SolverParams};
@@ -163,10 +164,60 @@ fn init(mut commands: Commands) {
     commands.spawn(Camera2d);
 }
 
+#[derive(Component)]
+struct DiagnosticsText;
+
+fn setup_diagnostics(mut commands: Commands) {
+    commands.spawn((
+        Text::default(),
+        TextFont {
+            font_size: 20.0,
+            ..default()
+        },
+        TextColor(Color::WHITE),
+        Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(10.0),
+            left: Val::Px(10.0),
+            ..default()
+        },
+        DiagnosticsText,
+    ));
+}
+
+fn update_diagnostics(
+    diagnostics: Res<DiagnosticsStore>,
+    particles: Query<&Particle>,
+    mut query: Query<&mut Text, With<DiagnosticsText>>,
+) {
+    let particle_count = particles.iter().count();
+
+    for mut text in &mut query {
+        let fps = diagnostics
+            .get(&FrameTimeDiagnosticsPlugin::FPS)
+            .and_then(|fps| fps.smoothed())
+            .unwrap_or(0.0);
+
+        let frame_time = diagnostics
+            .get(&FrameTimeDiagnosticsPlugin::FRAME_TIME)
+            .and_then(|ft| ft.smoothed())
+            .unwrap_or(0.0);
+
+        text.0 = format!(
+            "FPS: {:.1}\nFrame: {:.2}ms\nParticles: {}",
+            fps,
+            frame_time,
+            particle_count
+        );
+    }
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(MpmPlugin)
-        .add_systems(Startup, init)
+        .add_systems(Startup, (init, setup_diagnostics))
+        .add_systems(Update, update_diagnostics)
         .run();
 }
