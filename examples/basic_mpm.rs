@@ -4,7 +4,7 @@ use std::time::Duration;
 use bevy::prelude::*;
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use mpm2d::core::{calculate_grid_velocities, zero_grid};
-use mpm2d::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
+use mpm2d::solver::{grid_to_particle, particle_to_grid};
 use mpm2d::{GRAVITY, Grid, MaterialType, Particle, SolverParams};
 use rand::Rng;
 
@@ -148,8 +148,7 @@ impl Plugin for MpmPlugin {
             FixedUpdate,
             (
                 zero_grid,
-                particle_to_grid_mass_velocity,
-                particle_to_grid_forces,
+                particle_to_grid,
                 calculate_grid_velocities_wrapper,
                 grid_to_particle,
                 update_particle_transforms,

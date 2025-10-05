@@ -12,8 +12,16 @@ use crate::materials;
 use crate::materials::MaterialType;
 use crate::materials::utils;
 
-pub fn particle_to_grid_mass_velocity(query: Query<&Particle>, mut grid: ResMut<Grid>) {
-    for particle in &query {
+/// Two-pass P2G: accumulate mass/momentum, then apply stress forces
+/// Identical behavior to the previous split functions, just consolidated
+pub fn particle_to_grid(
+    time: Res<Time>,
+    solver_params: Res<SolverParams>,
+    particles: Query<&Particle>,
+    mut grid: ResMut<Grid>,
+) {
+    // Pass 1: accumulate mass and APIC momentum
+    for particle in &particles {
         // MLS interpolation using the native coordinate structure
         let interp = GridInterpolation::compute_for_particle(particle.position);
 
@@ -26,15 +34,9 @@ pub fn particle_to_grid_mass_velocity(query: Query<&Particle>, mut grid: ResMut<
             cell.velocity += mass_contribution * (particle.velocity + affine_contrib);
         }
     }
-}
 
-pub fn particle_to_grid_forces(
-    time: Res<Time>,
-    solver_params: Res<SolverParams>,
-    mut particles: Query<&mut Particle>,
-    mut grid: ResMut<Grid>,
-) {
-    for particle in &mut particles {
+    // Pass 2: apply stress forces
+    for particle in &particles {
         // Native coordinate-based interpolation
         let interp = GridInterpolation::compute_for_particle(particle.position);
 

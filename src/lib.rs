@@ -21,7 +21,7 @@ pub use materials::MaterialType;
 
 use crate::core::{calculate_grid_velocities, zero_grid};
 use crate::core::{cleanup_failed_particles, update_particle_health};
-use crate::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
+use crate::solver::{grid_to_particle, particle_to_grid};
 
 pub struct MpmPlugin {
     pub solver_params: Option<SolverParams>,
@@ -68,8 +68,7 @@ impl Plugin for MpmPlugin {
             (
                 update_particle_health,
                 zero_grid,
-                particle_to_grid_mass_velocity,
-                particle_to_grid_forces,
+                particle_to_grid,
                 calculate_grid_velocities_with_gravity,
                 grid_to_particle,
                 cleanup_failed_particles,

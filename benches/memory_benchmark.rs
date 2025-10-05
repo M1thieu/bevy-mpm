@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use bevy::prelude::*;
 use mpm2d::core::{calculate_grid_velocities, zero_grid};
-use mpm2d::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
+use mpm2d::solver::{grid_to_particle, particle_to_grid};
 use mpm2d::{GRAVITY, GRID_RESOLUTION, Grid, MaterialType, Particle, SolverParams};
 
 // Memory tracking allocator
@@ -91,8 +91,7 @@ fn main() {
             (
                 memory_benchmark_system,
                 zero_grid,
-                particle_to_grid_mass_velocity,
-                particle_to_grid_forces,
+                particle_to_grid,
                 |time: Res<Time>, grid: ResMut<Grid>| {
                     calculate_grid_velocities(time, grid, GRAVITY);
                 },
