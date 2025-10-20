@@ -13,7 +13,7 @@ pub mod solids;
 pub mod utils;
 
 // Re-export the main material type for convenience
-pub use material_types::MaterialType;
+pub use material_types::{MaterialModel, MaterialType};
 
 // Re-export physics utilities for easy access
 pub use utils::check;

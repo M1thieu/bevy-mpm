@@ -1,9 +1,9 @@
 // Minimal MLS-MPM example. Keeps the loop small so the new affine transfer is easy to inspect.
 use std::time::Duration;
 
-use bevy::prelude::*;
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
-use mpm2d::core::{calculate_grid_velocities, zero_grid};
+use bevy::prelude::*;
+use mpm2d::core::{calculate_grid_velocities, cleanup_grid_cells, zero_grid};
 use mpm2d::solver::{grid_to_particle, particle_to_grid};
 use mpm2d::{GRAVITY, Grid, MaterialType, Particle, SolverParams};
 use rand::Rng;
@@ -149,6 +149,7 @@ impl Plugin for MpmPlugin {
             (
                 zero_grid,
                 particle_to_grid,
+                cleanup_grid_cells,
                 calculate_grid_velocities_wrapper,
                 grid_to_particle,
                 update_particle_transforms,
@@ -204,9 +205,7 @@ fn update_diagnostics(
 
         text.0 = format!(
             "FPS: {:.1}\nFrame: {:.2}ms\nParticles: {}",
-            fps,
-            frame_time,
-            particle_count
+            fps, frame_time, particle_count
         );
     }
 }

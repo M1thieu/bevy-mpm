@@ -8,8 +8,7 @@ use bevy::prelude::*;
 use crate::config::SolverParams;
 use crate::core::Particle;
 use crate::core::{Grid, GridInterpolation};
-use crate::materials;
-use crate::materials::MaterialType;
+use crate::materials::MaterialModel;
 use crate::materials::utils;
 
 /// Two-pass P2G: accumulate mass/momentum, then apply stress forces
@@ -51,15 +50,9 @@ pub fn particle_to_grid(
         let volume = particle.mass * utils::inv_exact(density);
 
         // Calculate stress based on material type
-        let stress = match &particle.material_type {
-            MaterialType::Water => materials::fluids::water::calculate_stress(
-                &particle,
-                density,
-                solver_params.volume_correction_strength,
-                solver_params.preserve_fluid_volume && particle.material_type.is_fluid(),
-                solver_params.dynamic_viscosity,
-            ),
-        };
+        let stress = particle
+            .material_type
+            .compute_stress(particle, density, &solver_params);
 
         // MLS-MPM force application (Jiang et al. 2015, Eq. 16) with quadratic basis scaling
         let eq_16_term_0 = -4.0 * volume * stress * time.delta_secs();

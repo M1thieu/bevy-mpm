@@ -1,6 +1,8 @@
 use bevy::prelude::*;
-use mpm2d::core::{calculate_grid_velocities, zero_grid};
-use mpm2d::solver::{grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity};
+use mpm2d::core::{calculate_grid_velocities, cleanup_grid_cells, zero_grid};
+use mpm2d::solver::{
+    cleanup_grid_cells, grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity,
+};
 use mpm2d::{GRAVITY, GRID_RESOLUTION, Grid, MaterialType, Particle, SolverParams};
 use std::time::Duration;
 
@@ -77,6 +79,7 @@ fn main() {
                 zero_grid,
                 particle_to_grid_mass_velocity,
                 particle_to_grid_forces,
+                cleanup_grid_cells,
                 |time: Res<Time>, grid: ResMut<Grid>| {
                     calculate_grid_velocities(time, grid, GRAVITY);
                 },

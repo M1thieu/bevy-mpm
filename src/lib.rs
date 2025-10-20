@@ -19,7 +19,7 @@ pub use config::{GRAVITY, SolverParams};
 pub use core::{Cell, GRID_RESOLUTION, Grid, Particle};
 pub use materials::MaterialType;
 
-use crate::core::{calculate_grid_velocities, zero_grid};
+use crate::core::{calculate_grid_velocities, cleanup_grid_cells, zero_grid};
 use crate::core::{cleanup_failed_particles, update_particle_health};
 use crate::solver::{grid_to_particle, particle_to_grid};
 
@@ -69,6 +69,7 @@ impl Plugin for MpmPlugin {
                 update_particle_health,
                 zero_grid,
                 particle_to_grid,
+                cleanup_grid_cells,
                 calculate_grid_velocities_with_gravity,
                 grid_to_particle,
                 cleanup_failed_particles,

@@ -2,19 +2,13 @@
 //!
 //! Handles water pressure, viscosity, and EOS calculations.
 
-use crate::config::{EOS_POWER, EOS_STIFFNESS, REST_DENSITY};
+use crate::config::{EOS_POWER, EOS_STIFFNESS, REST_DENSITY, SolverParams};
 use crate::core::Particle;
 use crate::materials::utils;
 use bevy::prelude::*;
 
 /// Calculate water stress (original logic from P2G)
-pub fn calculate_stress(
-    particle: &Particle,
-    density: f32,
-    volume_correction_strength: f32,
-    preserve_volume: bool,
-    dynamic_viscosity: f32,
-) -> Mat2 {
+pub fn calculate_stress(particle: &Particle, density: f32, params: &SolverParams) -> Mat2 {
     let volume = particle.mass * utils::inv_exact(density);
 
     // Original EOS pressure
@@ -24,11 +18,11 @@ pub fn calculate_stress(
     );
 
     // Volume preservation correction (if enabled)
-    let volume_correction = if preserve_volume {
+    let volume_correction = if params.preserve_fluid_volume {
         let current_volume = volume;
         let target_volume = particle.volume0;
         let volume_deviation = (current_volume - target_volume) / target_volume;
-        volume_correction_strength * volume_deviation * REST_DENSITY
+        params.volume_correction_strength * volume_deviation * REST_DENSITY
     } else {
         0.0
     };
@@ -41,7 +35,14 @@ pub fn calculate_stress(
     let strain_rate = (particle.velocity_gradient + particle.velocity_gradient.transpose()) * 0.5;
     let trace = strain_rate.col(0).x + strain_rate.col(1).y;
     let deviatoric_strain = strain_rate - Mat2::from_diagonal(Vec2::splat(trace * 0.5));
-    let viscosity_term = 2.0 * dynamic_viscosity * deviatoric_strain;
+    let viscosity_term = 2.0 * params.dynamic_viscosity * deviatoric_strain;
 
     stress + viscosity_term
+}
+
+/// Fluids project deformation back to isotropic volume after integration.
+pub fn project_deformation(particle: &mut Particle) {
+    let jacobian = particle.deformation_gradient.determinant();
+    let scale = jacobian.abs().powf(0.25);
+    particle.deformation_gradient = Mat2::IDENTITY * scale;
 }

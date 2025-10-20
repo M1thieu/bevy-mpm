@@ -255,6 +255,11 @@ pub fn zero_grid(mut grid: ResMut<Grid>) {
     grid.zero_active_cells();
 }
 
+#[inline(always)]
+pub fn cleanup_grid_cells(mut grid: ResMut<Grid>) {
+    grid.cleanup_empty_cells();
+}
+
 // Boundary handling modes
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BoundaryHandling {
