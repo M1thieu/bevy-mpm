@@ -5,26 +5,35 @@
 
 use bevy::prelude::*;
 
-use crate::core::Particle;
-use crate::core::{GRID_RESOLUTION, Grid, GridInterpolation};
+use crate::core::{Grid, GRID_RESOLUTION, GridInterpolation, MpmState};
 use crate::materials::MaterialModel;
 
 /// Native coordinate-based G2P transfer (eliminates linear index conversions)
-pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: Res<Grid>) {
-    for mut particle in &mut query {
+pub fn grid_to_particle(
+    time: Res<Time>,
+    mut state: ResMut<MpmState>,
+) {
+    let grid_ptr: *const Grid = state.grid() as *const Grid;
+    let grid = unsafe { &*grid_ptr };
+
+    let cell_width = grid.cell_width();
+    let inv_d = 4.0 / (cell_width * cell_width);
+
+    let particles = state.particles_mut();
+
+    for particle in particles.iter_mut() {
         particle.velocity = Vec2::ZERO;
 
         // Native coordinate-based interpolation (MLS formulation)
         let interp = GridInterpolation::compute_for_particle(particle.position);
 
-        // B matrix from Jiang et al. 2015 (before multiplying with the fixed D^-1 factor)
-        let mut b = Mat2::ZERO;
+        let mut velocity_gradient = Mat2::ZERO;
 
         for (coord, weight, cell_distance) in interp.iter_neighbors() {
             if let Some(cell) = grid.get_cell_coord(coord) {
                 let weighted_velocity = cell.velocity * weight;
 
-                let term = Mat2::from_cols(
+                let outer = Mat2::from_cols(
                     Vec2::new(
                         weighted_velocity.x * cell_distance.x,
                         weighted_velocity.y * cell_distance.x,
@@ -35,25 +44,21 @@ pub fn grid_to_particle(time: Res<Time>, mut query: Query<&mut Particle>, grid: 
                     ),
                 );
 
-                b += term;
                 particle.velocity += weighted_velocity;
+                velocity_gradient += outer * (weight * inv_d);
             }
         }
 
-        // MLS-MPM affine velocity field: C = 4 * B for quadratic B-spline basis
-        let affine_velocity = b * 4.0;
-        particle.affine_momentum_matrix = affine_velocity;
-
-        // Store gradient for constitutive models and deformation tracking
-        particle.velocity_gradient = affine_velocity;
+        particle.affine_momentum_matrix = velocity_gradient;
+        particle.velocity_gradient = velocity_gradient;
 
         // Update deformation gradient: F_new = (I + dt * C) * F_old
         let dt = time.delta_secs();
-        let deformation_update = Mat2::IDENTITY + affine_velocity * dt;
+        let deformation_update = Mat2::IDENTITY + velocity_gradient * dt;
         particle.deformation_gradient = deformation_update * particle.deformation_gradient;
 
         let material = particle.material_type.clone();
-        material.project_deformation(&mut particle);
+        material.project_deformation(particle);
 
         let particle_velocity = particle.velocity;
 

@@ -11,17 +11,21 @@ use bevy::prelude::*;
 
 pub mod config;
 pub mod core;
+pub mod geometry;
 pub mod materials;
+pub mod math;
 pub mod solver;
 
 // Clean public API - everything you need to get started
-pub use config::{GRAVITY, SolverParams};
-pub use core::{Cell, GRID_RESOLUTION, Grid, Particle};
+pub use config::{GRAVITY, REST_DENSITY, SolverParams};
+pub use core::{GRID_RESOLUTION, Grid, GridNode, MpmState, Particle, ParticleRemap};
 pub use materials::MaterialType;
 
-use crate::core::{calculate_grid_velocities, cleanup_grid_cells, zero_grid};
-use crate::core::{cleanup_failed_particles, update_particle_health};
-use crate::solver::{grid_to_particle, particle_to_grid};
+use crate::core::{
+    cleanup_grid_cells, clear_particle_remap_system, remove_failed_particles_system, zero_grid,
+};
+use crate::core::update_particles_health;
+use crate::solver::{grid_to_particle, grid_update, particle_to_grid};
 
 pub struct MpmPlugin {
     pub solver_params: Option<SolverParams>,
@@ -55,24 +59,24 @@ impl MpmPlugin {
 
 impl Plugin for MpmPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Grid::new());
-
-        if let Some(params) = &self.solver_params {
-            app.insert_resource(params.clone());
-        } else {
-            app.insert_resource(SolverParams::default());
-        }
+        let params = self
+            .solver_params
+            .clone()
+            .unwrap_or_else(SolverParams::default);
+        app.insert_resource(MpmState::new(params, GRAVITY));
+        app.insert_resource(ParticleRemap::default());
 
         app.add_systems(
             Update,
             (
-                update_particle_health,
+                update_particle_health_system,
                 zero_grid,
                 particle_to_grid,
                 cleanup_grid_cells,
-                calculate_grid_velocities_with_gravity,
+                grid_update,
                 grid_to_particle,
-                cleanup_failed_particles,
+                remove_failed_particles_system,
+                clear_particle_remap_system,
             )
                 .chain(),
         );
@@ -83,6 +87,7 @@ impl Plugin for MpmPlugin {
     }
 }
 
-fn calculate_grid_velocities_with_gravity(time: Res<Time>, grid: ResMut<Grid>) {
-    calculate_grid_velocities(time, grid, GRAVITY);
+fn update_particle_health_system(mut state: ResMut<MpmState>) {
+    let particles = state.particles_mut();
+    update_particles_health(particles);
 }

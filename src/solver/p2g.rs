@@ -5,9 +5,7 @@
 
 use bevy::prelude::*;
 
-use crate::config::SolverParams;
-use crate::core::Particle;
-use crate::core::{Grid, GridInterpolation};
+use crate::core::{GridInterpolation, MpmState};
 use crate::materials::MaterialModel;
 use crate::materials::utils;
 
@@ -15,28 +13,34 @@ use crate::materials::utils;
 /// Identical behavior to the previous split functions, just consolidated
 pub fn particle_to_grid(
     time: Res<Time>,
-    solver_params: Res<SolverParams>,
-    particles: Query<&Particle>,
-    mut grid: ResMut<Grid>,
+    mut state: ResMut<MpmState>,
 ) {
-    // Pass 1: accumulate mass and APIC momentum
-    for particle in &particles {
-        // MLS interpolation using the native coordinate structure
+    state.rebuild_particle_bins();
+    let solver_params = state.solver_params().clone();
+    let dt = time.delta_secs();
+
+    let (particle_ptr, particle_len) = {
+        let slice = state.particles();
+        (slice.as_ptr(), slice.len())
+    };
+    let particles =
+        unsafe { std::slice::from_raw_parts(particle_ptr, particle_len) };
+    let grid = state.grid_mut();
+    let cell_width = grid.cell_width();
+    let inv_d = 4.0 / (cell_width * cell_width);
+
+    // Pass 1: accumulate mass
+    for particle in particles.iter() {
         let interp = GridInterpolation::compute_for_particle(particle.position);
 
-        for (coord, weight, cell_distance) in interp.iter_neighbors() {
-            let affine_contrib = particle.affine_momentum_matrix * cell_distance;
-            let mass_contribution = weight * particle.mass;
-
+        for (coord, weight, _) in interp.iter_neighbors() {
             let cell = grid.get_cell_coord_mut(coord);
-            cell.mass += mass_contribution;
-            cell.velocity += mass_contribution * (particle.velocity + affine_contrib);
+            cell.mass += weight * particle.mass;
         }
     }
 
-    // Pass 2: apply stress forces
-    for particle in &particles {
-        // Native coordinate-based interpolation
+    // Pass 2: scatter momentum with stress contribution
+    for particle in particles.iter() {
         let interp = GridInterpolation::compute_for_particle(particle.position);
 
         // Density calculation with direct coordinate access
@@ -54,13 +58,15 @@ pub fn particle_to_grid(
             .material_type
             .compute_stress(particle, density, &solver_params);
 
-        // MLS-MPM force application (Jiang et al. 2015, Eq. 16) with quadratic basis scaling
-        let eq_16_term_0 = -4.0 * volume * stress * time.delta_secs();
+        // Affine term (APIC) incorporating stress (Jiang et al. 2015)
+        let affine =
+            particle.mass * particle.velocity_gradient - (volume * inv_d * dt) * stress;
+        let momentum = particle.mass * particle.velocity;
 
         for (coord, weight, cell_distance) in interp.iter_neighbors() {
             let cell = grid.get_cell_coord_mut(coord);
-            let momentum = eq_16_term_0 * weight * cell_distance;
-            cell.velocity += momentum;
+            let contribution = affine * cell_distance + momentum;
+            cell.momentum += weight * contribution;
         }
     }
 }

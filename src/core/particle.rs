@@ -2,92 +2,96 @@
 //!
 //! Particles carry position, velocity, mass and material properties.
 
-use bevy::prelude::*;
-
-// Grid indexing removed - using coordinate-native sparse grid access
 use crate::materials::MaterialType;
+use crate::math::{
+    Matrix, Real, Vector, identity_matrix, matrix_determinant, matrix_trace, zero_matrix,
+    zero_vector,
+};
 
-#[derive(Component, Clone)]
+#[derive(Clone)]
 pub struct Particle {
-    pub position: Vec2,
-    pub velocity: Vec2,
-    pub mass: f32,
-    pub affine_momentum_matrix: Mat2, // MLS affine velocity field (C matrix)
+    pub position: Vector,
+    pub velocity: Vector,
+    pub mass: Real,
+    pub volume0: Real,
+    pub radius0: Real,
+    pub affine_momentum_matrix: Matrix, // MLS affine velocity field (C matrix)
+    pub velocity_gradient: Matrix,
+    pub deformation_gradient: Matrix,
     pub material_type: MaterialType,
 
-    // Deformation tracking for future material models
-    pub deformation_gradient: Mat2, // F matrix - tracks material deformation
-    pub velocity_gradient: Mat2,    // ∇v derived from the MLS affine matrix
+    // Simulation bookkeeping
+    pub grid_index: u64,
+    pub phase: Real,
+    pub psi_pos: Real,
+    pub is_static: bool,
+    pub kinematic_velocity: Option<Vector>,
 
-    // Particle health system
-    pub failed: bool,          // Mark particle for removal
-    pub condition_number: f32, // Numerical stability measure
-
-    // Volume tracking (basic particle property)
-    pub volume0: f32, // Initial/reference volume
+    // Health tracking
+    pub failed: bool,
+    pub condition_number: Real,
 }
 
 impl Particle {
     pub fn zeroed(material_type: MaterialType) -> Self {
         Self {
-            position: Vec2::ZERO,
-            velocity: Vec2::ZERO,
+            position: zero_vector(),
+            velocity: zero_vector(),
             mass: 1.0,
-            affine_momentum_matrix: Mat2::ZERO,
+            volume0: 1.0,
+            radius0: 1.0,
+            affine_momentum_matrix: zero_matrix(),
+            velocity_gradient: zero_matrix(),
+            deformation_gradient: identity_matrix(),
             material_type,
-            deformation_gradient: Mat2::IDENTITY,
-            velocity_gradient: Mat2::ZERO,
+            grid_index: 0,
+            phase: 1.0,
+            psi_pos: 0.0,
+            is_static: false,
+            kinematic_velocity: None,
             failed: false,
             condition_number: 1.0,
-            volume0: 1.0,
         }
     }
 
-    pub fn new(position: Vec2, material_type: MaterialType) -> Self {
+    pub fn new(position: Vector, material_type: MaterialType) -> Self {
         Self {
             position,
-            velocity: Vec2::ZERO,
-            mass: 1.0,
-            affine_momentum_matrix: Mat2::ZERO,
             material_type,
-            deformation_gradient: Mat2::IDENTITY,
-            velocity_gradient: Mat2::ZERO,
-            failed: false,
-            condition_number: 1.0,
-            volume0: 1.0,
+            ..Self::zeroed(MaterialType::water())
         }
     }
 
-    pub fn with_velocity(mut self, velocity: Vec2) -> Self {
+    pub fn with_velocity(mut self, velocity: Vector) -> Self {
         self.velocity = velocity;
         self
     }
 
-    pub fn with_mass(mut self, mass: f32) -> Self {
+    pub fn with_mass(mut self, mass: Real) -> Self {
         self.mass = mass;
         self
     }
 
+    pub fn with_radius(mut self, radius: Real) -> Self {
+        self.radius0 = radius;
+        self
+    }
+
     /// Create particle with specific density and radius
-    pub fn with_density(radius: f32, density: f32) -> Self {
+    pub fn with_density(radius: Real, density: Real) -> Self {
         let volume = std::f32::consts::PI * radius * radius;
         Self {
-            position: Vec2::ZERO,
-            velocity: Vec2::ZERO,
+            position: zero_vector(),
+            velocity: zero_vector(),
             mass: volume * density,
-            affine_momentum_matrix: Mat2::ZERO,
-            material_type: MaterialType::water(),
-            deformation_gradient: Mat2::IDENTITY,
-            velocity_gradient: Mat2::ZERO,
-            failed: false,
-            condition_number: 1.0,
             volume0: volume,
+            radius0: radius,
+            ..Self::zeroed(MaterialType::water())
         }
     }
 
-    /// Get current volume based on mass and density
     #[inline(always)]
-    pub fn current_volume(&self, density: f32) -> f32 {
+    pub fn current_volume(&self, density: Real) -> Real {
         if density > 0.0 {
             self.mass / density
         } else {
@@ -95,9 +99,8 @@ impl Particle {
         }
     }
 
-    /// Get current density based on volume
     #[inline(always)]
-    pub fn density_from_volume(&self, volume: f32) -> f32 {
+    pub fn density_from_volume(&self, volume: Real) -> Real {
         if volume > 0.0 {
             self.mass / volume
         } else {
@@ -105,9 +108,8 @@ impl Particle {
         }
     }
 
-    /// Get rest density (initial state)
     #[inline(always)]
-    pub fn rest_density(&self) -> f32 {
+    pub fn rest_density(&self) -> Real {
         if self.volume0 > 0.0 {
             self.mass / self.volume0
         } else {
@@ -115,51 +117,39 @@ impl Particle {
         }
     }
 
-    /// Get current volume based on deformation gradient determinant
-    /// J = det(F) represents volume change ratio
     #[inline(always)]
-    pub fn current_volume_from_deformation(&self) -> f32 {
-        let jacobian = self.deformation_gradient.determinant();
+    pub fn jacobian(&self) -> Real {
+        matrix_determinant(&self.deformation_gradient)
+    }
+
+    #[inline(always)]
+    pub fn current_volume_from_deformation(&self) -> Real {
+        let jacobian = self.jacobian();
         self.volume0 * jacobian.abs()
     }
 
-    /// Get deformation gradient determinant (Jacobian)
-    /// J = det(F) - represents volume change (1.0 = no change, >1.0 = expansion, <1.0 = compression)
-    #[inline(always)]
-    pub fn jacobian(&self) -> f32 {
-        self.deformation_gradient.determinant()
-    }
-
-    /// Check if particle should be marked as failed due to numerical instability
     #[inline(always)]
     pub fn update_health(&mut self) {
-        // Check for invalid matrix elements first
-        if !self.affine_momentum_matrix.is_finite() {
+        if !matrix_is_finite(&self.affine_momentum_matrix) {
             self.failed = true;
-            self.condition_number = f32::INFINITY;
+            self.condition_number = Real::INFINITY;
             return;
         }
 
-        // Calculate condition number approximation using matrix norms
-        let det = self.affine_momentum_matrix.determinant().abs();
-        let trace =
-            (self.affine_momentum_matrix.col(0).x + self.affine_momentum_matrix.col(1).y).abs();
+        let det = matrix_determinant(&self.affine_momentum_matrix).abs();
+        let trace = matrix_trace(&self.affine_momentum_matrix).abs();
 
-        // Better condition number approximation: ratio of largest to smallest singular values
-        // For 2x2 matrix, this is approximately |trace| / |det| when det is non-zero
         self.condition_number = if det > 1e-12 {
             trace / det
         } else {
-            f32::INFINITY
+            Real::INFINITY
         };
 
-        // Mark particle as failed if numerically unstable
-        const CONDITION_THRESHOLD: f32 = 1e6;
+        const CONDITION_THRESHOLD: Real = 1e6;
         if self.condition_number > CONDITION_THRESHOLD || !self.condition_number.is_finite() {
             self.failed = true;
         }
 
-        // Also check for invalid position/velocity/mass/volume
         if !self.position.is_finite()
             || !self.velocity.is_finite()
             || !self.mass.is_finite()
@@ -168,25 +158,18 @@ impl Particle {
             self.failed = true;
         }
 
-        // Check volume validity
         if !self.volume0.is_finite() || self.volume0 <= 0.0 {
             self.failed = true;
         }
     }
 }
 
-// System to update particle health and mark failed particles
-pub fn update_particle_health(mut particles: Query<&mut Particle>) {
-    particles.par_iter_mut().for_each(|mut particle| {
-        particle.update_health();
-    });
+fn matrix_is_finite(m: &Matrix) -> bool {
+    m.x_axis.is_finite() && m.y_axis.is_finite()
 }
 
-// System to remove failed particles from the simulation
-pub fn cleanup_failed_particles(mut commands: Commands, particles: Query<(Entity, &Particle)>) {
-    for (entity, particle) in particles.iter() {
-        if particle.failed {
-            commands.entity(entity).despawn();
-        }
+pub fn update_particles_health(particles: &mut [Particle]) {
+    for particle in particles.iter_mut() {
+        particle.update_health();
     }
 }

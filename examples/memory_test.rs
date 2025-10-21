@@ -1,34 +1,34 @@
 use bevy::prelude::*;
-use mpm2d::core::{calculate_grid_velocities, cleanup_grid_cells, zero_grid};
-use mpm2d::solver::{
-    cleanup_grid_cells, grid_to_particle, particle_to_grid_forces, particle_to_grid_mass_velocity,
-};
-use mpm2d::{GRAVITY, GRID_RESOLUTION, Grid, MaterialType, Particle, SolverParams};
+use mpm2d::core::{cleanup_grid_cells, zero_grid, ParticleRemap};
+use mpm2d::core::{clear_particle_remap_system, remove_failed_particles_system};
+use mpm2d::solver::{grid_update, grid_to_particle, particle_to_grid};
+use mpm2d::{GRAVITY, GRID_RESOLUTION, MaterialType, MpmState, Particle, SolverParams};
 use std::time::Duration;
 
-fn create_particles(mut commands: Commands) {
+fn create_particles(mut state: ResMut<MpmState>) {
     println!("Creating 5000 particles...");
     for x in 0..50 {
         for y in 0..100 {
             let position = Vec2::new(x as f32 + 55.0, y as f32 + 20.0);
-            commands.spawn(Particle::new(position, MaterialType::water()));
+            let mut particle = Particle::zeroed(MaterialType::water());
+            particle.position = position;
+            state.add_particle(particle);
         }
     }
 }
 
-fn memory_tracker(grid: Res<Grid>, particles: Query<&Particle>, mut frame_count: Local<u32>) {
+fn memory_tracker(state: Res<MpmState>, mut frame_count: Local<u32>) {
     *frame_count += 1;
 
     if *frame_count % 60 == 0 {
-        // Every second at 60fps
+        let grid = state.grid();
         let active_cells = grid.active_cell_count();
         let total_cells = GRID_RESOLUTION * GRID_RESOLUTION;
-        let particle_count = particles.iter().count();
+        let particle_count = state.particle_count();
 
-        // Estimate memory usage
-        let dense_grid_bytes = total_cells * std::mem::size_of::<mpm2d::Cell>();
-        let sparse_cells_bytes = active_cells * std::mem::size_of::<mpm2d::Cell>();
-        let hashmap_overhead = active_cells * (std::mem::size_of::<(i32, i32)>() + 8); // rough estimate
+        let dense_grid_bytes = total_cells * std::mem::size_of::<mpm2d::GridNode>();
+        let sparse_cells_bytes = active_cells * std::mem::size_of::<mpm2d::GridNode>();
+        let hashmap_overhead = active_cells * (std::mem::size_of::<(i32, i32)>() + 8);
         let particles_bytes = particle_count * std::mem::size_of::<Particle>();
 
         println!("\n--- Memory Analysis (Frame {}) ---", *frame_count);
@@ -53,7 +53,6 @@ fn memory_tracker(grid: Res<Grid>, particles: Query<&Particle>, mut frame_count:
     }
 
     if *frame_count > 300 {
-        // Exit after 5 seconds
         std::process::exit(0);
     }
 }
@@ -62,28 +61,25 @@ fn main() {
     println!("Memory Test: Sparse Grid vs Dense Grid");
     println!(
         "Dense grid theoretical size: {} KB",
-        (GRID_RESOLUTION * GRID_RESOLUTION * std::mem::size_of::<mpm2d::Cell>()) / 1024
+        (GRID_RESOLUTION * GRID_RESOLUTION * std::mem::size_of::<mpm2d::GridNode>()) / 1024
     );
 
     App::new()
         .add_plugins(MinimalPlugins)
-        .insert_resource(Grid::new())
-        .insert_resource(SolverParams::default())
-        .insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(
-            1.0 / 60.0,
-        )))
+        .insert_resource(MpmState::new(SolverParams::default(), GRAVITY))
+        .insert_resource(ParticleRemap::default())
+        .insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(1.0 / 60.0)))
         .add_systems(Startup, create_particles)
         .add_systems(
             FixedUpdate,
             (
                 zero_grid,
-                particle_to_grid_mass_velocity,
-                particle_to_grid_forces,
+                particle_to_grid,
                 cleanup_grid_cells,
-                |time: Res<Time>, grid: ResMut<Grid>| {
-                    calculate_grid_velocities(time, grid, GRAVITY);
-                },
+                grid_update,
                 grid_to_particle,
+                remove_failed_particles_system,
+                clear_particle_remap_system,
                 memory_tracker,
             )
                 .chain(),

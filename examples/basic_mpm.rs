@@ -1,57 +1,81 @@
-// Minimal MLS-MPM example. Keeps the loop small so the new affine transfer is easy to inspect.
+// Minimal MLS-MPM example using the new resource-driven solver state.
 use std::time::Duration;
 
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
-use mpm2d::core::{calculate_grid_velocities, cleanup_grid_cells, zero_grid};
-use mpm2d::solver::{grid_to_particle, particle_to_grid};
-use mpm2d::{GRAVITY, Grid, MaterialType, Particle, SolverParams};
+use mpm2d::core::{
+    cleanup_grid_cells, remove_failed_particles_system, zero_grid, GridInterpolation, MpmState,
+    ParticleRemap,
+};
+use mpm2d::solver::{grid_to_particle, grid_update, particle_to_grid};
+use mpm2d::{GRAVITY, MaterialType, Particle, SolverParams};
 use rand::Rng;
 
-fn init_grid(_grid: ResMut<Grid>) {
-    // Grid is now automatically initialized as sparse HashMap - no setup needed
+const CLUSTER_ORIGINS: [Vec2; 2] = [Vec2::new(16.0, 32.0), Vec2::new(112.0, 32.0)];
+const CLUSTER_WIDTH: u32 = 45;
+const CLUSTER_HEIGHT: u32 = 90;
+
+#[derive(Component)]
+struct ParticleVisual {
+    index: usize,
+}
+
+fn sim_to_world(position: Vec2) -> Vec3 {
+    Vec3::new((position.x - 64.0) * 4.0, (position.y - 64.0) * 4.0, 0.0)
+}
+
+fn init_grid(_state: ResMut<MpmState>) {
+    // Sparse grid is created by MpmState::new
+}
+
+fn spawn_particle_entity(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<ColorMaterial>,
+    index: usize,
+    position: Vec2,
+    color: Color,
+) {
+    commands.spawn((
+        ParticleVisual { index },
+        Mesh2d(meshes.add(Circle::new(1.0))),
+        MeshMaterial2d(materials.add(color)),
+        Transform::from_translation(sim_to_world(position)),
+    ));
 }
 
 fn init_particles(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut state: ResMut<MpmState>,
 ) {
     let mut rand = rand::rng();
-    for x in 0..50 {
-        for y in 0..100 {
-            let mut particle = Particle::zeroed(MaterialType::water());
-            particle.position = Vec2 {
-                x: 16.0 + x as f32 / 4.0,
-                y: 32.0 + y as f32 / 4.0,
-            };
-            particle.velocity =
-                Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0));
 
-            commands.spawn((
-                particle,
-                Mesh2d(meshes.add(Circle::new(1.0))),
-                MeshMaterial2d(materials.add(Color::hsl(210.0, 0.7, 0.3))),
-                Transform::from_xyz(0.0, 0.0, 0.0),
-            ));
-        }
-    }
-    for x in 0..50 {
-        for y in 0..100 {
-            let mut particle = Particle::zeroed(MaterialType::water());
-            particle.position = Vec2 {
-                x: 112.0 + x as f32 / 4.0,
-                y: 32.0 + y as f32 / 4.0,
-            };
-            particle.velocity =
-                Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0));
+    for (cluster_index, origin) in CLUSTER_ORIGINS.iter().enumerate() {
+        for x in 0..CLUSTER_WIDTH {
+            for y in 0..CLUSTER_HEIGHT {
+                let mut particle = Particle::zeroed(MaterialType::water());
+                particle.position = Vec2 {
+                    x: origin.x + x as f32 / 4.0,
+                    y: origin.y + y as f32 / 4.0,
+                };
+                particle.velocity = Vec2::new(
+                    rand.random_range(-1.0..=1.0),
+                    rand.random_range(-1.0..=1.0),
+                );
 
-            commands.spawn((
-                particle,
-                Mesh2d(meshes.add(Circle::new(1.0))),
-                MeshMaterial2d(materials.add(Color::hsl(210.0, 0.7, 0.3))),
-                Transform::from_xyz(0.0, 0.0, 0.0),
-            ));
+                let position = particle.position;
+                let index = state.add_particle(particle);
+                spawn_particle_entity(
+                    &mut commands,
+                    &mut meshes,
+                    &mut materials,
+                    index,
+                    position,
+                    Color::hsl(210.0, 0.7, 0.3 + cluster_index as f32 * 0.05),
+                );
+            }
         }
     }
 }
@@ -65,6 +89,7 @@ fn controls(
     time: Res<Time>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
+    mut state: ResMut<MpmState>,
 ) {
     let Ok(_window) = window.single() else {
         return;
@@ -74,7 +99,6 @@ fn controls(
     };
     let fspeed = 600.0 * time.delta_secs();
 
-    // Camera movement controls
     if input.pressed(KeyCode::ArrowUp) {
         transform.translation.y += fspeed;
     }
@@ -90,24 +114,31 @@ fn controls(
 
     if mouse.pressed(MouseButton::Left) {
         let mut rand = rand::rng();
-        let handle = meshes.add(Circle::new(1.0));
-
-        let mut particle = Particle::zeroed(MaterialType::water());
-        particle.position = Vec2 { x: 64.0, y: 64.0 };
-        particle.velocity = Vec2::new(
-            rand.random_range(-10.0..=10.0),
-            rand.random_range(-50.0..=-20.0),
+        let position = Vec2 {
+            x: 64.0 + rand.random_range(-2.0..=2.0),
+            y: 64.0 + rand.random_range(-2.0..=2.0),
+        };
+        let velocity = Vec2::new(
+            rand.random_range(-12.0..=12.0),
+            rand.random_range(-40.0..=-10.0),
         );
 
-        commands.spawn((
-            particle,
-            Mesh2d(handle),
-            MeshMaterial2d(materials.add(Color::hsl(0.0, 1.0, 0.5))),
-            Transform::from_xyz(0.0, 0.0, 0.0),
-        ));
+        let mut particle = Particle::zeroed(MaterialType::water());
+        particle.position = position;
+        particle.velocity = velocity;
+        let position = particle.position;
+        let index = state.add_particle(particle);
+
+        spawn_particle_entity(
+            &mut commands,
+            &mut meshes,
+            &mut materials,
+            index,
+            position,
+            Color::hsl(0.0, 1.0, 0.5),
+        );
     }
 
-    // Camera zoom controls
     if let Projection::Orthographic(projection2d) = &mut *projection {
         if input.pressed(KeyCode::Comma) {
             projection2d.scale *= 4.0f32.powf(time.delta_secs());
@@ -119,39 +150,107 @@ fn controls(
     }
 }
 
-fn update_particle_transforms(mut query: Query<(&mut Transform, &Particle)>) {
-    query.par_iter_mut().for_each(|(mut transform, particle)| {
-        transform.translation = Vec3::new(
-            (particle.position.x - 64.0) * 4.0,
-            (particle.position.y - 64.0) * 4.0,
-            0.0,
-        );
-    });
+fn update_particle_transforms(
+    state: Res<MpmState>,
+    mut query: Query<(&ParticleVisual, &mut Transform)>,
+) {
+    let particles = state.particles();
+    for (visual, mut transform) in query.iter_mut() {
+        if let Some(particle) = particles.get(visual.index) {
+            transform.translation = sim_to_world(particle.position);
+        }
+    }
 }
 
-fn calculate_grid_velocities_wrapper(time: Res<Time>, grid: ResMut<Grid>) {
-    calculate_grid_velocities(time, grid, GRAVITY);
+fn apply_particle_remap(
+    mut commands: Commands,
+    remap: Res<ParticleRemap>,
+    mut visuals: Query<(Entity, &mut ParticleVisual)>,
+) {
+    if remap.map.is_empty() {
+        return;
+    }
+
+    let map_len = remap.map.len();
+    for (entity, mut visual) in visuals.iter_mut() {
+        let old_index = visual.index;
+        if old_index >= map_len {
+            continue;
+        }
+
+        match remap.map[old_index] {
+            Some(new_index) => visual.index = new_index,
+            None => {
+                commands.entity(entity).despawn();
+            }
+        }
+    }
+}
+
+fn clear_particle_remap(mut remap: ResMut<ParticleRemap>) {
+    if !remap.map.is_empty() {
+        remap.map.clear();
+    }
+}
+
+fn log_particle_debug(state: Res<MpmState>, mut frame: Local<u32>) {
+    const SAMPLE_PERIOD: u32 = 30;
+    const SAMPLE_COUNT: usize = 3;
+
+    if *frame % SAMPLE_PERIOD == 0 {
+        let mut lines = Vec::new();
+        let grid = state.grid();
+        let particles = state.particles();
+
+        for (idx, particle) in particles.iter().enumerate().take(SAMPLE_COUNT) {
+            let interp = GridInterpolation::compute_for_particle(particle.position);
+            let mut density = 0.0;
+            for (coord, weight, _) in interp.iter_neighbors() {
+                if let Some(cell) = grid.get_cell_coord(coord) {
+                    density += cell.mass * weight;
+                }
+            }
+
+            let speed = particle.velocity.length();
+            let jacobian = particle.deformation_gradient.determinant();
+            let volume = particle.mass * if density > 0.0 { 1.0 / density } else { 0.0 };
+
+            lines.push(format!(
+                "#{idx}: pos=({:.2},{:.2}) speed={:.2} dens={:.2} vol={:.2} J={:.2}",
+                particle.position.x, particle.position.y, speed, density, volume, jacobian
+            ));
+        }
+
+        if !lines.is_empty() {
+            println!("[frame {:04}] {}", *frame, lines.join(" | "));
+        }
+    }
+
+    *frame = frame.wrapping_add(1);
 }
 
 pub struct MpmPlugin;
 
 impl Plugin for MpmPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Grid::new());
-        app.insert_resource(SolverParams::default());
+        app.insert_resource(MpmState::new(SolverParams::default(), GRAVITY));
+        app.insert_resource(ParticleRemap::default());
         app.insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(
             1.0 / 60.0,
         )));
         app.add_systems(Startup, (init_grid, init_particles).chain());
-        // Core MLS-MPM update loop: P2G → grid solve → G2P
         app.add_systems(
             FixedUpdate,
             (
                 zero_grid,
                 particle_to_grid,
                 cleanup_grid_cells,
-                calculate_grid_velocities_wrapper,
+                grid_update,
+                log_particle_debug,
                 grid_to_particle,
+                remove_failed_particles_system,
+                apply_particle_remap,
+                clear_particle_remap,
                 update_particle_transforms,
                 controls,
             )
@@ -187,10 +286,10 @@ fn setup_diagnostics(mut commands: Commands) {
 
 fn update_diagnostics(
     diagnostics: Res<DiagnosticsStore>,
-    particles: Query<&Particle>,
+    state: Res<MpmState>,
     mut query: Query<&mut Text, With<DiagnosticsText>>,
 ) {
-    let particle_count = particles.iter().count();
+    let particle_count = state.particle_count();
 
     for mut text in &mut query {
         let fps = diagnostics
@@ -219,3 +318,6 @@ fn main() {
         .add_systems(Update, update_diagnostics)
         .run();
 }
+
+
+

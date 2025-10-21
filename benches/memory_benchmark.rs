@@ -3,9 +3,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use bevy::prelude::*;
-use mpm2d::core::{calculate_grid_velocities, cleanup_grid_cells, zero_grid};
-use mpm2d::solver::{grid_to_particle, particle_to_grid};
-use mpm2d::{GRAVITY, GRID_RESOLUTION, Grid, MaterialType, Particle, SolverParams};
+use mpm2d::core::{cleanup_grid_cells, zero_grid, ParticleRemap};
+use mpm2d::core::{clear_particle_remap_system, remove_failed_particles_system};
+use mpm2d::solver::{grid_update, grid_to_particle, particle_to_grid};
+use mpm2d::{GRAVITY, GRID_RESOLUTION, MaterialType, MpmState, Particle, SolverParams};
 
 // Memory tracking allocator
 struct TrackingAllocator;
@@ -34,32 +35,27 @@ fn get_memory_usage() -> usize {
     ALLOCATED.load(Ordering::SeqCst)
 }
 
-fn create_test_particles(commands: &mut Commands) {
-    // Create same particle setup as basic example
-    for x in 0..50 {
-        for y in 0..100 {
-            let position = Vec2::new(x as f32 + 55.0, y as f32 + 20.0);
-            commands.spawn(Particle::new(position, MaterialType::water()));
-        }
-    }
-}
-
 fn memory_benchmark_system(
-    mut commands: Commands,
-    grid: ResMut<Grid>,
-    _particles: Query<&Particle>,
+    mut state: ResMut<MpmState>,
     mut frame_count: Local<u32>,
 ) {
     *frame_count += 1;
 
     if *frame_count == 1 {
-        // First frame: create particles and measure initial memory
-        create_test_particles(&mut commands);
+        for x in 0..50 {
+            for y in 0..100 {
+                let position = Vec2::new(x as f32 + 55.0, y as f32 + 20.0);
+                let mut particle = Particle::zeroed(MaterialType::water());
+                particle.position = position;
+                state.add_particle(particle);
+            }
+        }
+
         let initial_memory = get_memory_usage();
         println!("Initial memory usage: {} KB", initial_memory / 1024);
     } else if *frame_count == 10 {
-        // After 10 frames: measure memory with active simulation
         let active_memory = get_memory_usage();
+        let grid = state.grid();
         let active_cells = grid.active_cell_count();
         let total_cells = GRID_RESOLUTION * GRID_RESOLUTION;
 
@@ -81,8 +77,8 @@ fn main() {
 
     App::new()
         .add_plugins(MinimalPlugins)
-        .insert_resource(Grid::new())
-        .insert_resource(SolverParams::default())
+        .insert_resource(MpmState::new(SolverParams::default(), GRAVITY))
+        .insert_resource(ParticleRemap::default())
         .insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(
             1.0 / 60.0,
         )))
@@ -93,10 +89,10 @@ fn main() {
                 zero_grid,
                 particle_to_grid,
                 cleanup_grid_cells,
-                |time: Res<Time>, grid: ResMut<Grid>| {
-                    calculate_grid_velocities(time, grid, GRAVITY);
-                },
+                grid_update,
                 grid_to_particle,
+                remove_failed_particles_system,
+                clear_particle_remap_system,
             )
                 .chain(),
         )

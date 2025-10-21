@@ -5,14 +5,15 @@
 use crate::config::{EOS_POWER, EOS_STIFFNESS, REST_DENSITY, SolverParams};
 use crate::core::Particle;
 use crate::materials::utils;
-use bevy::prelude::*;
+use crate::math;
+use crate::math::{Matrix, Real};
 
 /// Calculate water stress (original logic from P2G)
-pub fn calculate_stress(particle: &Particle, density: f32, params: &SolverParams) -> Mat2 {
+pub fn calculate_stress(particle: &Particle, density: Real, params: &SolverParams) -> Matrix {
     let volume = particle.mass * utils::inv_exact(density);
 
     // Original EOS pressure
-    let eos_pressure = f32::max(
+    let eos_pressure = Real::max(
         -0.1,
         EOS_STIFFNESS * ((density / REST_DENSITY).powi(EOS_POWER as i32) - 1.0),
     );
@@ -29,12 +30,13 @@ pub fn calculate_stress(particle: &Particle, density: f32, params: &SolverParams
 
     // Combined pressure
     let total_pressure = eos_pressure + volume_correction;
-    let stress = Mat2::IDENTITY * -total_pressure;
+    let stress = math::identity_matrix() * -total_pressure;
 
     // Viscosity: deviatoric strain rate for incompressible flow
-    let strain_rate = (particle.velocity_gradient + particle.velocity_gradient.transpose()) * 0.5;
-    let trace = strain_rate.col(0).x + strain_rate.col(1).y;
-    let deviatoric_strain = strain_rate - Mat2::from_diagonal(Vec2::splat(trace * 0.5));
+    let strain_rate =
+        (particle.velocity_gradient + math::matrix_transpose(&particle.velocity_gradient)) * 0.5;
+    let trace = math::matrix_trace(&strain_rate);
+    let deviatoric_strain = strain_rate - Matrix::from_diagonal(math::repeat_vector(trace * 0.5));
     let viscosity_term = 2.0 * params.dynamic_viscosity * deviatoric_strain;
 
     stress + viscosity_term
@@ -42,7 +44,7 @@ pub fn calculate_stress(particle: &Particle, density: f32, params: &SolverParams
 
 /// Fluids project deformation back to isotropic volume after integration.
 pub fn project_deformation(particle: &mut Particle) {
-    let jacobian = particle.deformation_gradient.determinant();
+    let jacobian = math::matrix_determinant(&particle.deformation_gradient);
     let scale = jacobian.abs().powf(0.25);
-    particle.deformation_gradient = Mat2::IDENTITY * scale;
+    particle.deformation_gradient = math::identity_matrix() * scale;
 }
