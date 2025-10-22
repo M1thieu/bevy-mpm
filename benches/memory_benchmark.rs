@@ -3,9 +3,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use bevy::prelude::*;
-use mpm2d::core::{cleanup_grid_cells, zero_grid, ParticleRemap};
+use mpm2d::core::{ParticleRemap, cleanup_grid_cells, zero_grid};
 use mpm2d::core::{clear_particle_remap_system, remove_failed_particles_system};
-use mpm2d::solver::{grid_update, grid_to_particle, particle_to_grid};
+use mpm2d::solver::{grid_to_particle, grid_update, particle_to_grid};
 use mpm2d::{GRAVITY, GRID_RESOLUTION, MaterialType, MpmState, Particle, SolverParams};
 
 // Memory tracking allocator
@@ -35,10 +35,7 @@ fn get_memory_usage() -> usize {
     ALLOCATED.load(Ordering::SeqCst)
 }
 
-fn memory_benchmark_system(
-    mut state: ResMut<MpmState>,
-    mut frame_count: Local<u32>,
-) {
+fn memory_benchmark_system(mut state: ResMut<MpmState>, mut frame_count: Local<u32>) {
     *frame_count += 1;
 
     if *frame_count == 1 {

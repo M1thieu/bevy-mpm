@@ -1,7 +1,7 @@
 use bevy::prelude::*;
-use mpm2d::core::{cleanup_grid_cells, zero_grid, ParticleRemap};
+use mpm2d::core::{ParticleRemap, cleanup_grid_cells, zero_grid};
 use mpm2d::core::{clear_particle_remap_system, remove_failed_particles_system};
-use mpm2d::solver::{grid_update, grid_to_particle, particle_to_grid};
+use mpm2d::solver::{grid_to_particle, grid_update, particle_to_grid};
 use mpm2d::{GRAVITY, GRID_RESOLUTION, MaterialType, MpmState, Particle, SolverParams};
 use std::time::Duration;
 
@@ -68,7 +68,9 @@ fn main() {
         .add_plugins(MinimalPlugins)
         .insert_resource(MpmState::new(SolverParams::default(), GRAVITY))
         .insert_resource(ParticleRemap::default())
-        .insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(1.0 / 60.0)))
+        .insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(
+            1.0 / 60.0,
+        )))
         .add_systems(Startup, create_particles)
         .add_systems(
             FixedUpdate,

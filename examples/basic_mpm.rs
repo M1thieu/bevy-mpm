@@ -4,16 +4,16 @@ use std::time::Duration;
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use mpm2d::core::{
-    cleanup_grid_cells, remove_failed_particles_system, zero_grid, GridInterpolation, MpmState,
-    ParticleRemap,
+    GridInterpolation, MpmState, ParticleRemap, cleanup_grid_cells, remove_failed_particles_system,
+    zero_grid,
 };
 use mpm2d::solver::{grid_to_particle, grid_update, particle_to_grid};
 use mpm2d::{GRAVITY, MaterialType, Particle, SolverParams};
 use rand::Rng;
 
 const CLUSTER_ORIGINS: [Vec2; 2] = [Vec2::new(16.0, 32.0), Vec2::new(112.0, 32.0)];
-const CLUSTER_WIDTH: u32 = 45;
-const CLUSTER_HEIGHT: u32 = 90;
+const CLUSTER_WIDTH: u32 = 42;
+const CLUSTER_HEIGHT: u32 = 84;
 
 #[derive(Component)]
 struct ParticleVisual {
@@ -60,10 +60,8 @@ fn init_particles(
                     x: origin.x + x as f32 / 4.0,
                     y: origin.y + y as f32 / 4.0,
                 };
-                particle.velocity = Vec2::new(
-                    rand.random_range(-1.0..=1.0),
-                    rand.random_range(-1.0..=1.0),
-                );
+                particle.velocity =
+                    Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0));
 
                 let position = particle.position;
                 let index = state.add_particle(particle);
@@ -318,6 +316,3 @@ fn main() {
         .add_systems(Update, update_diagnostics)
         .run();
 }
-
-
-

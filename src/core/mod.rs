@@ -8,8 +8,8 @@ pub use grid::{
     NEIGHBOR_COUNT, apply_boundary_conditions,
 };
 pub use mpm_state::{
-    clear_particle_remap_system, cleanup_grid_cells, remove_failed_particles_system, zero_grid,
-    MpmState, ParticleRemap,
+    MpmState, ParticleRemap, cleanup_grid_cells, clear_particle_remap_system,
+    remove_failed_particles_system, zero_grid,
 };
 pub use particle::{
     Particle, ParticleContact, ParticleFracture, ParticlePlasticityState, update_particles_health,
