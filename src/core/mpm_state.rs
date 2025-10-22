@@ -1,12 +1,14 @@
+use std::ops::Range;
+
 use bevy::prelude::*;
 
 use crate::config::SolverParams;
 use crate::materials::utils;
 use crate::math::{Real, Vector};
 
-use super::grid::{apply_boundary_conditions, BoundaryHandling, Grid};
+use super::grid::{BoundaryHandling, Grid, apply_boundary_conditions};
 use super::particle::Particle;
-use super::particle_set::ParticleSet;
+use super::particle_set::{PackedCell, ParticleSet};
 
 #[derive(Resource, Default)]
 pub struct ParticleRemap {
@@ -40,6 +42,18 @@ impl MpmState {
 
     pub fn particle_set_mut(&mut self) -> &mut ParticleSet {
         &mut self.particle_set
+    }
+
+    pub fn particle_bins(&self) -> &[[usize; 4]] {
+        self.particle_set.bins()
+    }
+
+    pub fn particle_regions(&self) -> &[(PackedCell, Range<usize>)] {
+        self.particle_set.cell_regions()
+    }
+
+    pub fn particle_order(&self) -> &[usize] {
+        self.particle_set.particle_order()
     }
 
     pub fn particle_count(&self) -> usize {
@@ -122,12 +136,6 @@ impl MpmState {
         if mapping.is_empty() {
             return mapping;
         }
-
-        self.particle_set.order.clear();
-        self.particle_set.regions.clear();
-        self.particle_set.active_regions.clear();
-        self.particle_set.active_cells.clear();
-        self.particle_set.particle_bins.clear();
 
         self.rebuild_particle_bins();
         mapping

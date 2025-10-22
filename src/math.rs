@@ -52,6 +52,25 @@ pub fn diagonal_from_vec(vec: Vector) -> Matrix {
     Matrix::from_diagonal(vec)
 }
 
+#[inline(always)]
+pub fn outer_product(a: Vector, b: Vector) -> Matrix {
+    Matrix::from_cols(
+        Vec2::new(a.x * b.x, a.y * b.x),
+        Vec2::new(a.x * b.y, a.y * b.y),
+    )
+}
+
+#[inline(always)]
+pub fn quadratic_bspline_weights(offset: Real) -> [Real; 3] {
+    let d2 = offset * offset;
+
+    [
+        0.5 * (0.5 - offset) * (0.5 - offset),
+        0.75 - d2,
+        0.5 * (0.5 + offset) * (0.5 + offset),
+    ]
+}
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct DecomposedTensor {
     pub deviatoric_part: Matrix,

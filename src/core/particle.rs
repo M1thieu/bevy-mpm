@@ -8,6 +8,59 @@ use crate::math::{
     zero_vector,
 };
 
+/// Boundary contact information stored alongside a particle when interaction
+/// with static geometry is enabled.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ParticleContact {
+    pub boundary_normal: Vector,
+    pub boundary_distance: Real,
+}
+
+impl Default for ParticleContact {
+    fn default() -> Self {
+        Self {
+            boundary_normal: zero_vector(),
+            boundary_distance: 0.0,
+        }
+    }
+}
+
+/// Fracture-related parameters used by snow / brittle materials.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ParticleFracture {
+    pub crack_propagation_factor: Real,
+    pub crack_threshold: Real,
+}
+
+impl Default for ParticleFracture {
+    fn default() -> Self {
+        Self {
+            crack_propagation_factor: 0.0,
+            crack_threshold: Real::MAX,
+        }
+    }
+}
+
+/// Internal material state carried per particle for plasticity / hardening.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ParticlePlasticityState {
+    pub nacc_alpha: Real,
+    pub plastic_hardening: Real,
+    pub elastic_hardening: Real,
+    pub log_volume_gain: Real,
+}
+
+impl Default for ParticlePlasticityState {
+    fn default() -> Self {
+        Self {
+            nacc_alpha: -0.01,
+            plastic_hardening: 1.0,
+            elastic_hardening: 1.0,
+            log_volume_gain: 0.0,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Particle {
     pub position: Vector,
@@ -18,6 +71,7 @@ pub struct Particle {
     pub affine_momentum_matrix: Matrix, // MLS affine velocity field (C matrix)
     pub velocity_gradient: Matrix,
     pub deformation_gradient: Matrix,
+    pub plastic_deformation_gradient_det: Real,
     pub material_type: MaterialType,
 
     // Simulation bookkeeping
@@ -30,6 +84,11 @@ pub struct Particle {
     // Health tracking
     pub failed: bool,
     pub condition_number: Real,
+
+    // Optional physics extensions
+    pub plasticity: ParticlePlasticityState,
+    pub contact: Option<ParticleContact>,
+    pub fracture: Option<ParticleFracture>,
 }
 
 impl Particle {
@@ -43,6 +102,7 @@ impl Particle {
             affine_momentum_matrix: zero_matrix(),
             velocity_gradient: zero_matrix(),
             deformation_gradient: identity_matrix(),
+            plastic_deformation_gradient_det: 1.0,
             material_type,
             grid_index: 0,
             phase: 1.0,
@@ -51,6 +111,9 @@ impl Particle {
             kinematic_velocity: None,
             failed: false,
             condition_number: 1.0,
+            plasticity: ParticlePlasticityState::default(),
+            contact: None,
+            fracture: None,
         }
     }
 
@@ -90,6 +153,29 @@ impl Particle {
         }
     }
 
+    pub fn with_plasticity(mut self, plasticity: ParticlePlasticityState) -> Self {
+        self.plasticity = plasticity;
+        self
+    }
+
+    pub fn with_contact(mut self, contact: ParticleContact) -> Self {
+        self.contact = Some(contact);
+        self
+    }
+
+    pub fn clear_contact(&mut self) {
+        self.contact = None;
+    }
+
+    pub fn with_fracture(mut self, fracture: ParticleFracture) -> Self {
+        self.fracture = Some(fracture);
+        self
+    }
+
+    pub fn clear_fracture(&mut self) {
+        self.fracture = None;
+    }
+
     #[inline(always)]
     pub fn current_volume(&self, density: Real) -> Real {
         if density > 0.0 {
@@ -120,6 +206,11 @@ impl Particle {
     #[inline(always)]
     pub fn jacobian(&self) -> Real {
         matrix_determinant(&self.deformation_gradient)
+    }
+
+    #[inline(always)]
+    pub fn plastic_jacobian(&self) -> Real {
+        self.plastic_deformation_gradient_det
     }
 
     #[inline(always)]

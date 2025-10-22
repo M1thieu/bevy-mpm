@@ -7,8 +7,8 @@
 
 use bevy::prelude::*;
 
-use crate::geometry::sp_grid::{pack_from_ivec, unpack_coords, PackedCell, SpGrid};
-use crate::math::{zero_vector, Real, Vector};
+use crate::geometry::sp_grid::{PackedCell, SpGrid, pack_from_ivec, unpack_coords};
+use crate::math::{Real, Vector, quadratic_bspline_weights, zero_vector};
 
 #[derive(Clone, Debug)]
 pub struct GridNode {
@@ -126,9 +126,7 @@ impl Grid {
             .map(|(id, node)| (unpack_coords(id), node))
     }
 
-    pub fn iter_active_cells_mut(
-        &mut self,
-    ) -> impl Iterator<Item = ((i32, i32), &mut GridNode)> {
+    pub fn iter_active_cells_mut(&mut self) -> impl Iterator<Item = ((i32, i32), &mut GridNode)> {
         self.nodes
             .iter_cells_mut()
             .map(|(id, node)| (unpack_coords(id), node))
@@ -171,16 +169,13 @@ pub struct GridInterpolation {
 impl GridInterpolation {
     #[inline(always)]
     pub fn compute_for_particle(position: Vec2) -> Self {
-        let base_cell = IVec2::new(
-            position.x.floor() as i32 - 1,
-            position.y.floor() as i32 - 1,
-        );
+        let base_cell = IVec2::new(position.x.floor() as i32 - 1, position.y.floor() as i32 - 1);
 
         let center_cell = base_cell + IVec2::ONE;
         let cell_difference = position - center_cell.as_vec2() - 0.5;
 
-        let x_weights = calculate_bspline_weight(cell_difference.x);
-        let y_weights = calculate_bspline_weight(cell_difference.y);
+        let x_weights = quadratic_bspline_weights(cell_difference.x);
+        let y_weights = quadratic_bspline_weights(cell_difference.y);
 
         let weights = [
             Vec2::new(x_weights[0], y_weights[0]),
@@ -230,16 +225,6 @@ impl GridInterpolation {
             )
         })
     }
-}
-
-fn calculate_bspline_weight(d: f32) -> [f32; 3] {
-    let d2 = d * d;
-
-    [
-        0.5 * (0.5 - d) * (0.5 - d),
-        0.75 - d2,
-        0.5 * (0.5 + d) * (0.5 + d),
-    ]
 }
 
 #[inline(always)]

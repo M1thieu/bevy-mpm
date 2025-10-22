@@ -5,14 +5,12 @@
 
 use bevy::prelude::*;
 
-use crate::core::{Grid, GRID_RESOLUTION, GridInterpolation, MpmState};
+use crate::core::{GRID_RESOLUTION, Grid, GridInterpolation, MpmState};
 use crate::materials::MaterialModel;
+use crate::math::outer_product;
 
 /// Native coordinate-based G2P transfer (eliminates linear index conversions)
-pub fn grid_to_particle(
-    time: Res<Time>,
-    mut state: ResMut<MpmState>,
-) {
+pub fn grid_to_particle(time: Res<Time>, mut state: ResMut<MpmState>) {
     let grid_ptr: *const Grid = state.grid() as *const Grid;
     let grid = unsafe { &*grid_ptr };
 
@@ -33,16 +31,7 @@ pub fn grid_to_particle(
             if let Some(cell) = grid.get_cell_coord(coord) {
                 let weighted_velocity = cell.velocity * weight;
 
-                let outer = Mat2::from_cols(
-                    Vec2::new(
-                        weighted_velocity.x * cell_distance.x,
-                        weighted_velocity.y * cell_distance.x,
-                    ),
-                    Vec2::new(
-                        weighted_velocity.x * cell_distance.y,
-                        weighted_velocity.y * cell_distance.y,
-                    ),
-                );
+                let outer = outer_product(weighted_velocity, cell_distance);
 
                 particle.velocity += weighted_velocity;
                 velocity_gradient += outer * (weight * inv_d);

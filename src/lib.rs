@@ -21,10 +21,10 @@ pub use config::{GRAVITY, REST_DENSITY, SolverParams};
 pub use core::{GRID_RESOLUTION, Grid, GridNode, MpmState, Particle, ParticleRemap};
 pub use materials::MaterialType;
 
+use crate::core::update_particles_health;
 use crate::core::{
     cleanup_grid_cells, clear_particle_remap_system, remove_failed_particles_system, zero_grid,
 };
-use crate::core::update_particles_health;
 use crate::solver::{grid_to_particle, grid_update, particle_to_grid};
 
 pub struct MpmPlugin {

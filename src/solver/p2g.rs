@@ -11,10 +11,7 @@ use crate::materials::utils;
 
 /// Two-pass P2G: accumulate mass/momentum, then apply stress forces
 /// Identical behavior to the previous split functions, just consolidated
-pub fn particle_to_grid(
-    time: Res<Time>,
-    mut state: ResMut<MpmState>,
-) {
+pub fn particle_to_grid(time: Res<Time>, mut state: ResMut<MpmState>) {
     state.rebuild_particle_bins();
     let solver_params = state.solver_params().clone();
     let dt = time.delta_secs();
@@ -23,8 +20,7 @@ pub fn particle_to_grid(
         let slice = state.particles();
         (slice.as_ptr(), slice.len())
     };
-    let particles =
-        unsafe { std::slice::from_raw_parts(particle_ptr, particle_len) };
+    let particles = unsafe { std::slice::from_raw_parts(particle_ptr, particle_len) };
     let grid = state.grid_mut();
     let cell_width = grid.cell_width();
     let inv_d = 4.0 / (cell_width * cell_width);
@@ -59,8 +55,7 @@ pub fn particle_to_grid(
             .compute_stress(particle, density, &solver_params);
 
         // Affine term (APIC) incorporating stress (Jiang et al. 2015)
-        let affine =
-            particle.mass * particle.velocity_gradient - (volume * inv_d * dt) * stress;
+        let affine = particle.mass * particle.velocity_gradient - (volume * inv_d * dt) * stress;
         let momentum = particle.mass * particle.velocity;
 
         for (coord, weight, cell_distance) in interp.iter_neighbors() {

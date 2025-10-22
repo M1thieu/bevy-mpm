@@ -12,12 +12,12 @@ fn pack_coords(ix: i32, iy: i32) -> PackedCell {
 
 #[derive(Clone)]
 pub struct ParticleSet {
-    pub particles: Vec<Particle>,
-    pub order: Vec<usize>,
-    pub regions: Vec<(PackedCell, Range<usize>)>,
-    pub active_regions: HashSet<PackedCell>,
-    pub active_cells: Vec<PackedCell>,
-    pub particle_bins: Vec<[usize; 4]>,
+    particles: Vec<Particle>,
+    order: Vec<usize>,
+    regions: Vec<(PackedCell, Range<usize>)>,
+    active_regions: HashSet<PackedCell>,
+    active_cells: Vec<PackedCell>,
+    particle_bins: Vec<[usize; 4]>,
 }
 
 impl ParticleSet {
@@ -36,7 +36,6 @@ impl ParticleSet {
         }
     }
 
-
     pub fn iter(&self) -> impl Iterator<Item = &Particle> {
         self.particles.iter()
     }
@@ -47,15 +46,14 @@ impl ParticleSet {
 
     pub fn insert(&mut self, particle: Particle) -> usize {
         let index = self.particles.len();
-        self.order.push(index);
         self.particles.push(particle);
+        self.invalidate_spatial_index();
         index
     }
 
     pub fn insert_batch(&mut self, mut batch: Vec<Particle>) {
-        let start = self.order.len();
-        self.order.extend(start..start + batch.len());
         self.particles.append(&mut batch);
+        self.invalidate_spatial_index();
     }
 
     pub fn push(&mut self, particle: Particle) -> usize {
@@ -82,6 +80,26 @@ impl ParticleSet {
         self.particles.get_mut(index)
     }
 
+    pub fn particle_order(&self) -> &[usize] {
+        &self.order
+    }
+
+    pub fn cell_regions(&self) -> &[(PackedCell, Range<usize>)] {
+        &self.regions
+    }
+
+    pub fn active_region_ids(&self) -> &HashSet<PackedCell> {
+        &self.active_regions
+    }
+
+    pub fn cell_assignments(&self) -> &[PackedCell] {
+        &self.active_cells
+    }
+
+    pub fn bins(&self) -> &[[usize; 4]] {
+        &self.particle_bins
+    }
+
     pub fn remove_failed(&mut self) -> Vec<Option<usize>> {
         if !self.particles.iter().any(|particle| particle.failed) {
             return Vec::new();
@@ -100,60 +118,57 @@ impl ParticleSet {
         }
 
         self.particles = survivors;
+        self.invalidate_spatial_index();
         mapping
     }
 
     pub fn clear(&mut self) {
         self.particles.clear();
-        self.order.clear();
-        self.regions.clear();
-        self.active_regions.clear();
-        self.active_cells.clear();
-        self.particle_bins.clear();
+        self.invalidate_spatial_index();
     }
 
     pub fn rebuild_bins(&mut self, cell_width: Real) {
-        if self.particles.is_empty() {
-            self.order.clear();
-            self.regions.clear();
-            self.active_regions.clear();
-            self.active_cells.clear();
-            self.particle_bins.clear();
+        let particle_count = self.particles.len();
+        if particle_count == 0 {
+            self.invalidate_spatial_index();
             return;
         }
 
-        if self.order.len() != self.particles.len() {
-            self.order = (0..self.particles.len()).collect();
-        }
+        self.order.clear();
+        self.order.extend(0..particle_count);
+        self.active_regions.clear();
+        self.regions.clear();
+        self.particle_bins.clear();
+        self.active_cells.resize(particle_count, 0);
 
         for (idx, particle) in self.particles.iter_mut().enumerate() {
-            let grid_coords = grid_coords(particle.position, cell_width);
-            particle.grid_index = pack_coords(grid_coords.0, grid_coords.1);
-            if idx >= self.active_cells.len() {
-                self.active_cells.push(particle.grid_index);
-            } else {
-                self.active_cells[idx] = particle.grid_index;
-            }
+            let (ix, iy) = grid_coords(particle.position, cell_width);
+            let packed = pack_coords(ix, iy);
+            particle.grid_index = packed;
+            self.active_cells[idx] = packed;
         }
 
-        self.order.sort_by_key(|&idx| self.particles[idx].grid_index);
+        self.order
+            .sort_by_key(|&idx| self.particles[idx].grid_index);
 
-        self.particle_bins.clear();
-        self.regions.clear();
-        self.active_regions.clear();
-
-        let mut current_region = self.particles[self.order[0]].grid_index;
-        let mut range_start = 0;
+        let mut current_region: Option<(PackedCell, usize)> = None;
         let mut current_bin = [usize::MAX; 4];
         let mut bin_len = 0;
 
-        for (sorted_idx, particle_idx) in self.order.iter().enumerate() {
-            let particle = &self.particles[*particle_idx];
-            if particle.grid_index != current_region {
-                self.regions.push((current_region, range_start..sorted_idx));
-                self.active_regions.insert(current_region);
-                range_start = sorted_idx;
-                current_region = particle.grid_index;
+        for (sorted_idx, &particle_idx) in self.order.iter().enumerate() {
+            let particle = &self.particles[particle_idx];
+            let cell = particle.grid_index;
+
+            match current_region {
+                Some((region_cell, start_idx)) if region_cell != cell => {
+                    self.regions.push((region_cell, start_idx..sorted_idx));
+                    self.active_regions.insert(region_cell);
+                    current_region = Some((cell, sorted_idx));
+                }
+                None => {
+                    current_region = Some((cell, sorted_idx));
+                }
+                _ => {}
             }
 
             if bin_len == 4 {
@@ -162,7 +177,7 @@ impl ParticleSet {
                 bin_len = 0;
             }
 
-            current_bin[bin_len] = *particle_idx;
+            current_bin[bin_len] = particle_idx;
             bin_len += 1;
         }
 
@@ -170,8 +185,18 @@ impl ParticleSet {
             self.particle_bins.push(current_bin);
         }
 
-        self.regions.push((current_region, range_start..self.order.len()));
-        self.active_regions.insert(current_region);
+        if let Some((cell, start_idx)) = current_region {
+            self.regions.push((cell, start_idx..self.order.len()));
+            self.active_regions.insert(cell);
+        }
+    }
+
+    fn invalidate_spatial_index(&mut self) {
+        self.order.clear();
+        self.regions.clear();
+        self.active_regions.clear();
+        self.active_cells.clear();
+        self.particle_bins.clear();
     }
 }
 
