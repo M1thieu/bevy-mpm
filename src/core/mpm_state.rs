@@ -3,12 +3,11 @@ use std::ops::Range;
 use bevy::prelude::*;
 
 use crate::config::SolverParams;
-use crate::materials::utils;
 use crate::math::{Real, Vector};
 
 use super::grid::{BoundaryHandling, Grid, apply_boundary_conditions};
 use super::particle::Particle;
-use super::particle_set::{PackedCell, ParticleSet};
+use super::particle_set::{PackedCell, ParticleSet, ParticleTransferCache};
 
 #[derive(Resource, Default)]
 pub struct ParticleRemap {
@@ -54,6 +53,48 @@ impl MpmState {
 
     pub fn particle_order(&self) -> &[usize] {
         self.particle_set.particle_order()
+    }
+
+    pub fn particle_transfer_cache(&self) -> &[ParticleTransferCache] {
+        self.particle_set.transfer_cache()
+    }
+
+    pub fn particles_and_cache(&self) -> (&[Particle], &[ParticleTransferCache]) {
+        self.particle_set.particles_and_cache()
+    }
+
+    pub fn particles_mut_and_cache(&mut self) -> (&mut [Particle], &[ParticleTransferCache]) {
+        self.particle_set.particles_mut_and_cache()
+    }
+
+    pub fn grid_mut_and_particles_cache(
+        &mut self,
+    ) -> (&mut Grid, &[Particle], &[ParticleTransferCache]) {
+        let grid_ptr = &mut self.grid as *mut Grid;
+        let (particles_ptr, particles_len, cache_ptr, cache_len) = {
+            let (particles, cache) = self.particle_set.particles_and_cache();
+            (
+                particles.as_ptr(),
+                particles.len(),
+                cache.as_ptr(),
+                cache.len(),
+            )
+        };
+        unsafe {
+            (
+                &mut *grid_ptr,
+                std::slice::from_raw_parts(particles_ptr, particles_len),
+                std::slice::from_raw_parts(cache_ptr, cache_len),
+            )
+        }
+    }
+
+    pub fn grid_and_particles_mut_cache(
+        &mut self,
+    ) -> (&Grid, &mut [Particle], &[ParticleTransferCache]) {
+        let grid_ptr = &self.grid as *const Grid;
+        let (particles, cache) = self.particle_set.particles_mut_and_cache();
+        unsafe { (&*grid_ptr, particles, cache) }
     }
 
     pub fn particle_count(&self) -> usize {
@@ -121,9 +162,8 @@ impl MpmState {
         let gravity_step = self.gravity * dt;
         for (coords, node) in self.grid.iter_active_cells_mut() {
             if node.mass > 0.0 {
-                let momentum = node.momentum + node.mass * gravity_step;
-                let inv_mass = utils::inv_exact(node.mass);
-                node.velocity = momentum * inv_mass;
+                // Velocity is already computed in P2G, just add gravity
+                node.velocity += gravity_step;
 
                 let coord = IVec2::new(coords.0, coords.1);
                 apply_boundary_conditions(node, coord, self.boundary);

@@ -5,29 +5,23 @@
 
 use bevy::prelude::*;
 
-use crate::core::{GRID_RESOLUTION, Grid, GridInterpolation, MpmState};
+use crate::core::{GRID_RESOLUTION, MpmState};
 use crate::materials::MaterialModel;
 use crate::math::outer_product;
 
 /// Native coordinate-based G2P transfer (eliminates linear index conversions)
 pub fn grid_to_particle(time: Res<Time>, mut state: ResMut<MpmState>) {
-    let grid_ptr: *const Grid = state.grid() as *const Grid;
-    let grid = unsafe { &*grid_ptr };
+    let (grid, particles, transfer_cache) = state.grid_and_particles_mut_cache();
 
     let cell_width = grid.cell_width();
     let inv_d = 4.0 / (cell_width * cell_width);
 
-    let particles = state.particles_mut();
-
-    for particle in particles.iter_mut() {
+    for (particle, transfer) in particles.iter_mut().zip(transfer_cache.iter()) {
         particle.velocity = Vec2::ZERO;
-
-        // Native coordinate-based interpolation (MLS formulation)
-        let interp = GridInterpolation::compute_for_particle(particle.position);
 
         let mut velocity_gradient = Mat2::ZERO;
 
-        for (coord, weight, cell_distance) in interp.iter_neighbors() {
+        for &(coord, weight, cell_distance) in &transfer.neighbors {
             if let Some(cell) = grid.get_cell_coord(coord) {
                 let weighted_velocity = cell.velocity * weight;
 

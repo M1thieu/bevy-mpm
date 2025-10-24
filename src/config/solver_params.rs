@@ -19,7 +19,7 @@ impl Default for SolverParams {
         Self {
             preserve_fluid_volume: false, // EOS handles volume naturally
             volume_correction_strength: 0.0,
-            dynamic_viscosity: 0.1,
+            dynamic_viscosity: 0.001,
         }
     }
 }
@@ -30,7 +30,7 @@ impl SolverParams {
         Self {
             preserve_fluid_volume: true,
             volume_correction_strength: 0.5,
-            dynamic_viscosity: 0.1,
+            dynamic_viscosity: 0.001,
         }
     }
 
@@ -39,7 +39,7 @@ impl SolverParams {
         Self {
             preserve_fluid_volume: false,
             volume_correction_strength: 0.0,
-            dynamic_viscosity: 0.1,
+            dynamic_viscosity: 0.001,
         }
     }
 

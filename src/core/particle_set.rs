@@ -2,12 +2,27 @@ use std::collections::HashSet;
 use std::ops::Range;
 
 use crate::core::Particle;
+use crate::core::grid::{GridInterpolation, NEIGHBOR_COUNT};
 use crate::math::{Real, Vector};
+use bevy::prelude::{IVec2, Vec2};
 
 pub type PackedCell = u64;
 
 fn pack_coords(ix: i32, iy: i32) -> PackedCell {
     ((ix as u64) << 32) | (iy as u32 as u64)
+}
+
+#[derive(Clone, Copy)]
+pub struct ParticleTransferCache {
+    pub neighbors: [(IVec2, f32, Vec2); NEIGHBOR_COUNT],
+}
+
+impl Default for ParticleTransferCache {
+    fn default() -> Self {
+        Self {
+            neighbors: [(IVec2::ZERO, 0.0, Vec2::ZERO); NEIGHBOR_COUNT],
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -18,6 +33,7 @@ pub struct ParticleSet {
     active_regions: HashSet<PackedCell>,
     active_cells: Vec<PackedCell>,
     particle_bins: Vec<[usize; 4]>,
+    transfer_cache: Vec<ParticleTransferCache>,
 }
 
 impl ParticleSet {
@@ -33,6 +49,7 @@ impl ParticleSet {
             active_regions: HashSet::new(),
             active_cells: Vec::new(),
             particle_bins: Vec::new(),
+            transfer_cache: Vec::new(),
         }
     }
 
@@ -100,6 +117,22 @@ impl ParticleSet {
         &self.particle_bins
     }
 
+    pub fn transfer_cache(&self) -> &[ParticleTransferCache] {
+        &self.transfer_cache
+    }
+
+    pub fn particles_and_cache(&self) -> (&[Particle], &[ParticleTransferCache]) {
+        (&self.particles, &self.transfer_cache)
+    }
+
+    pub fn particles_mut_and_cache(&mut self) -> (&mut [Particle], &[ParticleTransferCache]) {
+        let cache_ptr = self.transfer_cache.as_ptr();
+        let cache_len = self.transfer_cache.len();
+        let particles = self.particles.as_mut_slice();
+        let cache = unsafe { std::slice::from_raw_parts(cache_ptr, cache_len) };
+        (particles, cache)
+    }
+
     pub fn remove_failed(&mut self) -> Vec<Option<usize>> {
         if !self.particles.iter().any(|particle| particle.failed) {
             return Vec::new();
@@ -108,22 +141,31 @@ impl ParticleSet {
         let old_len = self.particles.len();
         let mut mapping = vec![None; old_len];
         let mut survivors = Vec::with_capacity(old_len);
+        let mut cache_survivors = Vec::with_capacity(old_len);
 
-        for (old_idx, particle) in self.particles.drain(..).enumerate() {
+        for (old_idx, (particle, cache)) in self
+            .particles
+            .drain(..)
+            .zip(self.transfer_cache.drain(..))
+            .enumerate()
+        {
             if !particle.failed {
                 let new_idx = survivors.len();
                 mapping[old_idx] = Some(new_idx);
                 survivors.push(particle);
+                cache_survivors.push(cache);
             }
         }
 
         self.particles = survivors;
+        self.transfer_cache = cache_survivors;
         self.invalidate_spatial_index();
         mapping
     }
 
     pub fn clear(&mut self) {
         self.particles.clear();
+        self.transfer_cache.clear();
         self.invalidate_spatial_index();
     }
 
@@ -140,12 +182,22 @@ impl ParticleSet {
         self.regions.clear();
         self.particle_bins.clear();
         self.active_cells.resize(particle_count, 0);
+        self.transfer_cache
+            .resize(particle_count, ParticleTransferCache::default());
 
         for (idx, particle) in self.particles.iter_mut().enumerate() {
             let (ix, iy) = grid_coords(particle.position, cell_width);
             let packed = pack_coords(ix, iy);
             particle.grid_index = packed;
             self.active_cells[idx] = packed;
+
+            let interp = GridInterpolation::compute_for_particle(particle.position);
+            let cache = &mut self.transfer_cache[idx];
+            for (entry, (coord, weight, distance)) in
+                cache.neighbors.iter_mut().zip(interp.iter_neighbors())
+            {
+                *entry = (coord, weight, distance);
+            }
         }
 
         self.order

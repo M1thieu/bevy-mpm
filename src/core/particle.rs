@@ -177,6 +177,11 @@ impl Particle {
     }
 
     #[inline(always)]
+    pub fn clear_cached_transfer(&mut self) {
+        // Cache stored on ParticleSet; placeholder if we later move it per particle.
+    }
+
+    #[inline(always)]
     pub fn current_volume(&self, density: Real) -> Real {
         if density > 0.0 {
             self.mass / density

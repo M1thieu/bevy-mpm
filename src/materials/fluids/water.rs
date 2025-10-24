@@ -12,6 +12,9 @@ use crate::math::{Matrix, Real};
 pub fn calculate_stress(particle: &Particle, density: Real, params: &SolverParams) -> Matrix {
     let volume = particle.mass * utils::inv_exact(density);
 
+    // Deformation gradient determinant (Jacobian) - volume change ratio
+    let jacobian = math::matrix_determinant(&particle.deformation_gradient);
+
     // Original EOS pressure
     let eos_pressure = Real::max(
         -0.1,
@@ -28,16 +31,17 @@ pub fn calculate_stress(particle: &Particle, density: Real, params: &SolverParam
         0.0
     };
 
-    // Combined pressure
+    // Combined pressure - multiply by Jacobian for Piola-Kirchhoff stress
     let total_pressure = eos_pressure + volume_correction;
-    let stress = math::identity_matrix() * -total_pressure;
+    let stress = math::identity_matrix() * (-total_pressure * jacobian);
 
     // Viscosity: deviatoric strain rate for incompressible flow
+    // Also scale by Jacobian for consistency
     let strain_rate =
         (particle.velocity_gradient + math::matrix_transpose(&particle.velocity_gradient)) * 0.5;
     let trace = math::matrix_trace(&strain_rate);
     let deviatoric_strain = strain_rate - Matrix::from_diagonal(math::repeat_vector(trace * 0.5));
-    let viscosity_term = 2.0 * params.dynamic_viscosity * deviatoric_strain;
+    let viscosity_term = 2.0 * params.dynamic_viscosity * jacobian * deviatoric_strain;
 
     stress + viscosity_term
 }

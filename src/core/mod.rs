@@ -14,4 +14,4 @@ pub use mpm_state::{
 pub use particle::{
     Particle, ParticleContact, ParticleFracture, ParticlePlasticityState, update_particles_health,
 };
-pub use particle_set::{PackedCell, ParticleSet};
+pub use particle_set::{PackedCell, ParticleSet, ParticleTransferCache};
