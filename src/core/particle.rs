@@ -78,6 +78,13 @@ pub struct Particle {
     pub grid_index: u64,
     pub phase: Real,
     pub psi_pos: Real,
+    pub parameter1: Real,
+    pub parameter2: Real,
+    pub crack_propagation_factor: Real,
+    pub crack_threshold: Real,
+    pub cohesion_mass: Real,
+    pub cohesion_energy: Real,
+    pub phase_buffer: Vector,
     pub is_static: bool,
     pub kinematic_velocity: Option<Vector>,
 
@@ -89,6 +96,8 @@ pub struct Particle {
     pub plasticity: ParticlePlasticityState,
     pub contact: Option<ParticleContact>,
     pub fracture: Option<ParticleFracture>,
+    pub user_data: u64, // TODO: assess whether these debug slots are useful for LP runtime tooling
+    pub debug_value: Real, // TODO: assess whether these debug slots are useful for LP runtime tooling
 }
 
 impl Particle {
@@ -107,6 +116,13 @@ impl Particle {
             grid_index: 0,
             phase: 1.0,
             psi_pos: 0.0,
+            parameter1: 0.0,
+            parameter2: 0.0,
+            crack_propagation_factor: 0.0,
+            crack_threshold: Real::MAX,
+            cohesion_mass: Real::MAX,
+            cohesion_energy: 0.0,
+            phase_buffer: zero_vector(),
             is_static: false,
             kinematic_velocity: None,
             failed: false,
@@ -114,6 +130,8 @@ impl Particle {
             plasticity: ParticlePlasticityState::default(),
             contact: None,
             fracture: None,
+            user_data: 0,
+            debug_value: 0.0,
         }
     }
 

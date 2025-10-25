@@ -45,7 +45,8 @@ pub fn particle_to_grid(time: Res<Time>, mut state: ResMut<MpmState>) {
 
         // Affine term (APIC) incorporating stress (Jiang et al. 2015)
         // CRITICAL: Use volume0 (rest volume) not current volume
-        let affine = particle.mass * particle.velocity_gradient - (particle.volume0 * inv_d * dt) * stress;
+        let affine =
+            particle.mass * particle.velocity_gradient - (particle.volume0 * inv_d * dt) * stress;
         let momentum = particle.mass * particle.velocity;
 
         for &(coord, weight, cell_distance) in &transfer.neighbors {
