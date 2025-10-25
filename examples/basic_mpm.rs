@@ -24,10 +24,6 @@ fn sim_to_world(position: Vec2) -> Vec3 {
     Vec3::new((position.x - 64.0) * 4.0, (position.y - 64.0) * 4.0, 0.0)
 }
 
-fn init_grid(_state: ResMut<MpmState>) {
-    // Sparse grid is created by MpmState::new
-}
-
 fn spawn_particle_entity(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
@@ -236,7 +232,7 @@ impl Plugin for MpmPlugin {
         app.insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(
             1.0 / 60.0,
         )));
-        app.add_systems(Startup, (init_grid, init_particles).chain());
+        app.add_systems(Startup, init_particles);
         app.add_systems(
             FixedUpdate,
             (
