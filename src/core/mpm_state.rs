@@ -43,7 +43,7 @@ impl MpmState {
         &mut self.particle_set
     }
 
-    pub fn particle_bins(&self) -> &[[usize; 4]] {
+    pub fn particle_bins(&self) -> &[[usize; 5]] {
         self.particle_set.bins()
     }
 

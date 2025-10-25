@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::ops::Range;
 
 use crate::core::Particle;
-use crate::core::grid::{GridInterpolation, NEIGHBOR_COUNT};
+use crate::core::grid::{GridInterpolation, NEIGHBOR_COUNT, is_coord_neighborhood_safe};
 use crate::math::{Real, Vector};
 use bevy::prelude::{IVec2, Vec2};
 
@@ -32,7 +32,7 @@ pub struct ParticleSet {
     regions: Vec<(PackedCell, Range<usize>)>,
     active_regions: HashSet<PackedCell>,
     active_cells: Vec<PackedCell>,
-    particle_bins: Vec<[usize; 4]>,
+    particle_bins: Vec<[usize; 5]>,
     transfer_cache: Vec<ParticleTransferCache>,
 }
 
@@ -113,7 +113,7 @@ impl ParticleSet {
         &self.active_cells
     }
 
-    pub fn bins(&self) -> &[[usize; 4]] {
+    pub fn bins(&self) -> &[[usize; 5]] {
         &self.particle_bins
     }
 
@@ -187,6 +187,16 @@ impl ParticleSet {
 
         for (idx, particle) in self.particles.iter_mut().enumerate() {
             let (ix, iy) = grid_coords(particle.position, cell_width);
+            let cell_coord = IVec2::new(ix, iy);
+
+            if !is_coord_neighborhood_safe(cell_coord) {
+                particle.failed = true;
+                particle.grid_index = u64::MAX;
+                self.active_cells[idx] = u64::MAX;
+                self.transfer_cache[idx] = ParticleTransferCache::default();
+                continue;
+            }
+
             let packed = pack_coords(ix, iy);
             particle.grid_index = packed;
             self.active_cells[idx] = packed;
@@ -204,11 +214,14 @@ impl ParticleSet {
             .sort_by_key(|&idx| self.particles[idx].grid_index);
 
         let mut current_region: Option<(PackedCell, usize)> = None;
-        let mut current_bin = [usize::MAX; 4];
+        let mut current_bin = [usize::MAX; 5];
         let mut bin_len = 0;
 
         for (sorted_idx, &particle_idx) in self.order.iter().enumerate() {
             let particle = &self.particles[particle_idx];
+            if particle.failed {
+                continue;
+            }
             let cell = particle.grid_index;
 
             match current_region {
@@ -223,9 +236,9 @@ impl ParticleSet {
                 _ => {}
             }
 
-            if bin_len == 4 {
+            if bin_len == 5 {
                 self.particle_bins.push(current_bin);
-                current_bin = [usize::MAX; 4];
+                current_bin = [usize::MAX; 5];
                 bin_len = 0;
             }
 

@@ -43,6 +43,15 @@ pub fn particle_to_grid(time: Res<Time>, mut state: ResMut<MpmState>) {
             .material_type
             .compute_stress(particle, density, &solver_params);
 
+        let psi_mass =
+            if particle.phase > 0.0 && particle.crack_propagation_factor != 0.0 && !particle.failed
+            {
+                particle.mass
+            } else {
+                0.0
+            };
+        let psi_momentum = psi_mass * particle.psi_pos;
+
         // Affine term (APIC) incorporating stress (Jiang et al. 2015)
         // CRITICAL: Use volume0 (rest volume) not current volume
         let affine =
@@ -53,6 +62,10 @@ pub fn particle_to_grid(time: Res<Time>, mut state: ResMut<MpmState>) {
             let cell = grid.get_cell_coord_mut(coord);
             let contribution = affine * cell_distance + momentum;
             cell.momentum += weight * contribution;
+            if psi_mass > 0.0 {
+                cell.psi_mass += weight * psi_mass;
+                cell.psi_momentum += weight * psi_momentum;
+            }
         }
     }
 
