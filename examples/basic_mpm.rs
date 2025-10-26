@@ -1,5 +1,5 @@
 // Minimal MLS-MPM example using the new resource-driven solver state.
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
@@ -7,7 +7,10 @@ use mpm2d::core::{
     GridInterpolation, MpmState, ParticleRemap, cleanup_grid_cells, remove_failed_particles_system,
     zero_grid,
 };
-use mpm2d::solver::{grid_to_particle, grid_update, particle_to_grid};
+use mpm2d::solver::{
+    grid_to_particle as solver_grid_to_particle, grid_update,
+    particle_to_grid as solver_particle_to_grid,
+};
 use mpm2d::{GRAVITY, MaterialType, Particle, SolverParams};
 use rand::Rng;
 
@@ -20,8 +23,18 @@ struct ParticleVisual {
     index: usize,
 }
 
+#[derive(Resource, Default, Clone, Copy)]
+struct ExampleTimings {
+    p2g_ms: f32,
+    g2p_ms: f32,
+}
+
 fn sim_to_world(position: Vec2) -> Vec3 {
     Vec3::new((position.x - 64.0) * 4.0, (position.y - 64.0) * 4.0, 0.0)
+}
+
+fn world_to_sim(position: Vec2) -> Vec2 {
+    Vec2::new(position.x / 4.0 + 64.0, position.y / 4.0 + 64.0)
 }
 
 fn spawn_particle_entity(
@@ -187,7 +200,7 @@ fn clear_particle_remap(mut remap: ResMut<ParticleRemap>) {
     }
 }
 
-fn log_particle_debug(state: Res<MpmState>, mut frame: Local<u32>) {
+fn log_particle_debug(state: Res<MpmState>, timings: Res<ExampleTimings>, mut frame: Local<u32>) {
     const SAMPLE_PERIOD: u32 = 30;
     const SAMPLE_COUNT: usize = 3;
 
@@ -216,11 +229,76 @@ fn log_particle_debug(state: Res<MpmState>, mut frame: Local<u32>) {
         }
 
         if !lines.is_empty() {
+            lines.push(format!(
+                "timings: p2g={:.3}ms g2p={:.3}ms",
+                timings.p2g_ms, timings.g2p_ms
+            ));
             println!("[frame {:04}] {}", *frame, lines.join(" | "));
         }
     }
 
     *frame = frame.wrapping_add(1);
+}
+
+fn profile_particle_to_grid(
+    time: Res<Time>,
+    state: ResMut<MpmState>,
+    mut timings: ResMut<ExampleTimings>,
+) {
+    let start = Instant::now();
+    solver_particle_to_grid(time, state);
+    timings.p2g_ms = start.elapsed().as_secs_f32() * 1000.0;
+}
+
+fn profile_grid_to_particle(
+    time: Res<Time>,
+    state: ResMut<MpmState>,
+    mut timings: ResMut<ExampleTimings>,
+) {
+    let start = Instant::now();
+    solver_grid_to_particle(time, state);
+    timings.g2p_ms = start.elapsed().as_secs_f32() * 1000.0;
+}
+
+fn apply_cursor_force(
+    mut state: ResMut<MpmState>,
+    windows: Query<&Window>,
+    camera_query: Query<(&Camera, &GlobalTransform)>,
+    time: Res<Time<Fixed>>,
+) {
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Some(cursor_pos) = window.cursor_position() else {
+        return;
+    };
+    let Ok((camera, camera_transform)) = camera_query.single() else {
+        return;
+    };
+    let Ok(world_pos) = camera.viewport_to_world_2d(camera_transform, cursor_pos) else {
+        return;
+    };
+
+    let sim_pos = world_to_sim(world_pos);
+    let radius = 12.0;
+    let strength = 180.0;
+    let dt = time.delta_secs();
+
+    let normal = Vec2::Y;
+    let particles = state.particles_mut();
+    for particle in particles.iter_mut() {
+        let offset = particle.position - sim_pos;
+        let distance = offset.length();
+        if distance < radius {
+            let direction = if distance > 1.0e-4 {
+                offset / distance
+            } else {
+                normal
+            };
+            let falloff = (1.0 - distance / radius).powi(2);
+            particle.velocity += direction * strength * falloff * dt;
+        }
+    }
 }
 
 pub struct MpmPlugin;
@@ -229,6 +307,7 @@ impl Plugin for MpmPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(MpmState::new(SolverParams::default(), GRAVITY));
         app.insert_resource(ParticleRemap::default());
+        app.insert_resource(ExampleTimings::default());
         app.insert_resource(Time::<Fixed>::from_duration(Duration::from_secs_f64(
             1.0 / 60.0,
         )));
@@ -236,12 +315,13 @@ impl Plugin for MpmPlugin {
         app.add_systems(
             FixedUpdate,
             (
+                apply_cursor_force,
                 zero_grid,
-                particle_to_grid,
+                profile_particle_to_grid,
                 cleanup_grid_cells,
                 grid_update,
                 log_particle_debug,
-                grid_to_particle,
+                profile_grid_to_particle,
                 remove_failed_particles_system,
                 apply_particle_remap,
                 clear_particle_remap,
@@ -281,6 +361,7 @@ fn setup_diagnostics(mut commands: Commands) {
 fn update_diagnostics(
     diagnostics: Res<DiagnosticsStore>,
     state: Res<MpmState>,
+    timings: Res<ExampleTimings>,
     mut query: Query<&mut Text, With<DiagnosticsText>>,
 ) {
     let particle_count = state.particle_count();
@@ -297,8 +378,8 @@ fn update_diagnostics(
             .unwrap_or(0.0);
 
         text.0 = format!(
-            "FPS: {:.1}\nFrame: {:.2}ms\nParticles: {}",
-            fps, frame_time, particle_count
+            "FPS: {:.1}\nFrame: {:.2}ms\nParticles: {}\nP2G: {:.3} ms\nG2P: {:.3} ms",
+            fps, frame_time, particle_count, timings.p2g_ms, timings.g2p_ms,
         );
     }
 }
