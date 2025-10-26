@@ -3,7 +3,7 @@ use std::ops::Range;
 
 use crate::core::Particle;
 use crate::core::grid::{NEIGHBOR_COUNT, is_coord_neighborhood_safe};
-use crate::core::kernel::{cell_from_position, populate_transfer_cache};
+use crate::core::kernel::{cell_colour, cell_from_position, populate_transfer_cache};
 use crate::math::Real;
 use bevy::prelude::{IVec2, Vec2};
 
@@ -26,6 +26,33 @@ impl Default for ParticleTransferCache {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct ParticleBin {
+    pub colour: u8,
+    pub len: u8,
+    pub indices: [usize; 4],
+}
+
+impl ParticleBin {
+    fn new(colour: u8) -> Self {
+        Self {
+            colour,
+            len: 0,
+            indices: [usize::MAX; 4],
+        }
+    }
+
+    fn push(&mut self, idx: usize) {
+        debug_assert!((self.len as usize) < self.indices.len());
+        self.indices[self.len as usize] = idx;
+        self.len += 1;
+    }
+
+    fn is_full(&self) -> bool {
+        self.len as usize == self.indices.len()
+    }
+}
+
 #[derive(Clone)]
 pub struct ParticleSet {
     particles: Vec<Particle>,
@@ -33,8 +60,7 @@ pub struct ParticleSet {
     regions: Vec<(PackedCell, Range<usize>)>,
     active_regions: HashSet<PackedCell>,
     active_cells: Vec<PackedCell>,
-    // Matches Sparkl's 5-wide bins (4 particles + scheduling metadata slot).
-    particle_bins: Vec<[usize; 5]>,
+    particle_bins: Vec<ParticleBin>,
     transfer_cache: Vec<ParticleTransferCache>,
 }
 
@@ -115,7 +141,7 @@ impl ParticleSet {
         &self.active_cells
     }
 
-    pub fn bins(&self) -> &[[usize; 5]] {
+    pub fn bins(&self) -> &[ParticleBin] {
         &self.particle_bins
     }
 
@@ -209,9 +235,7 @@ impl ParticleSet {
             .sort_by_key(|&idx| self.particles[idx].grid_index);
 
         let mut current_region: Option<(PackedCell, usize)> = None;
-        let mut current_bin = [usize::MAX; 5];
-        // TODO: store region color/scheduling metadata in the final slot to mirror Sparkl's bin colouring.
-        let mut bin_len = 0;
+        let mut current_bin: Option<ParticleBin> = None;
 
         for (sorted_idx, &particle_idx) in self.order.iter().enumerate() {
             let particle = &self.particles[particle_idx];
@@ -232,18 +256,30 @@ impl ParticleSet {
                 _ => {}
             }
 
-            if bin_len == 5 {
-                self.particle_bins.push(current_bin);
-                current_bin = [usize::MAX; 5];
-                bin_len = 0;
+            let colour = cell_colour(cell_from_position(particle.position, cell_width));
+            let renew_bin = match current_bin {
+                Some(bin) => bin.is_full() || bin.colour != colour,
+                None => true,
+            };
+
+            if renew_bin {
+                if let Some(bin) = current_bin.take() {
+                    if bin.len > 0 {
+                        self.particle_bins.push(bin);
+                    }
+                }
+                current_bin = Some(ParticleBin::new(colour));
             }
 
-            current_bin[bin_len] = particle_idx;
-            bin_len += 1;
+            if let Some(bin) = current_bin.as_mut() {
+                bin.push(particle_idx);
+            }
         }
 
-        if bin_len > 0 {
-            self.particle_bins.push(current_bin);
+        if let Some(bin) = current_bin {
+            if bin.len > 0 {
+                self.particle_bins.push(bin);
+            }
         }
 
         if let Some((cell, start_idx)) = current_region {

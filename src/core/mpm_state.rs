@@ -7,14 +7,14 @@ use crate::math::{Real, Vector};
 
 use super::grid::{BoundaryHandling, Grid, apply_boundary_conditions};
 use super::particle::Particle;
-use super::particle_set::{PackedCell, ParticleSet, ParticleTransferCache};
+use super::particle_set::{PackedCell, ParticleBin, ParticleSet, ParticleTransferCache};
 
 #[derive(Resource, Default)]
 pub struct ParticleRemap {
     pub map: Vec<Option<usize>>,
 }
 
-/// Aggregate simulation state mirroring Sparkl's resource layout.
+/// Aggregate simulation state for the solver.
 #[derive(Resource)]
 pub struct MpmState {
     particle_set: ParticleSet,
@@ -43,7 +43,7 @@ impl MpmState {
         &mut self.particle_set
     }
 
-    pub fn particle_bins(&self) -> &[[usize; 5]] {
+    pub fn particle_bins(&self) -> &[ParticleBin] {
         self.particle_set.bins()
     }
 

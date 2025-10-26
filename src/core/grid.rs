@@ -3,7 +3,7 @@
 //! This reworks the legacy dense HashMap grid into a structure backed by
 //! `SpGrid<GridNode>`, exposing the same helper APIs (interpolation,
 //! neighborhood iteration) so the existing solver code keeps compiling while
-//! we progressively port the remaining logic from Sparkl.
+//! we finish porting the remaining logic.
 
 use bevy::prelude::*;
 

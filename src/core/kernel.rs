@@ -6,9 +6,6 @@ use super::grid::GridInterpolation;
 use super::particle_set::ParticleTransferCache;
 
 /// Compute the inverse dimension factor used by MLS-MPM kernels.
-///
-/// Sparkl names this `Kernel::inv_d(dx)`. Keeping it in one place helps keep
-/// solver code consistent between P2G and G2P.
 #[inline]
 pub fn inv_d(cell_width: Real) -> Real {
     4.0 / (cell_width * cell_width)
@@ -22,6 +19,12 @@ pub fn cell_from_position(position: Vector, cell_width: Real) -> IVec2 {
         (position.x * inv).round() as i32,
         (position.y * inv).round() as i32,
     )
+}
+
+/// Compute the 2-bit colouring for a grid cell.
+#[inline]
+pub fn cell_colour(cell: IVec2) -> u8 {
+    (((cell.x as u8) & 1) << 0) | (((cell.y as u8) & 1) << 1)
 }
 
 /// Populate the cached quadratic B-spline weights and distances for a particle.
