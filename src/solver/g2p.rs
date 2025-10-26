@@ -5,7 +5,7 @@
 
 use bevy::prelude::*;
 
-use crate::core::{GRID_RESOLUTION, MpmState};
+use crate::core::{GRID_RESOLUTION, MpmState, kernel::inv_d};
 use crate::materials::MaterialModel;
 use crate::math::outer_product;
 
@@ -14,7 +14,7 @@ pub fn grid_to_particle(time: Res<Time>, mut state: ResMut<MpmState>) {
     let (grid, particles, transfer_cache) = state.grid_and_particles_mut_cache();
 
     let cell_width = grid.cell_width();
-    let inv_d = 4.0 / (cell_width * cell_width);
+    let inv_d = inv_d(cell_width);
 
     for (particle, transfer) in particles.iter_mut().zip(transfer_cache.iter()) {
         particle.velocity = Vec2::ZERO;

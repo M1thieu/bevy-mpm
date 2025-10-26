@@ -5,7 +5,7 @@
 
 use bevy::prelude::*;
 
-use crate::core::MpmState;
+use crate::core::{MpmState, kernel::inv_d};
 use crate::materials::MaterialModel;
 use crate::materials::utils;
 
@@ -18,7 +18,7 @@ pub fn particle_to_grid(time: Res<Time>, mut state: ResMut<MpmState>) {
 
     let (grid, particles, cache) = state.grid_mut_and_particles_cache();
     let cell_width = grid.cell_width();
-    let inv_d = 4.0 / (cell_width * cell_width);
+    let inv_d = inv_d(cell_width);
 
     // Pass 1: accumulate mass
     for (particle, transfer) in particles.iter().zip(cache.iter()) {

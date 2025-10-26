@@ -2,8 +2,9 @@ use std::collections::HashSet;
 use std::ops::Range;
 
 use crate::core::Particle;
-use crate::core::grid::{GridInterpolation, NEIGHBOR_COUNT, is_coord_neighborhood_safe};
-use crate::math::{Real, Vector};
+use crate::core::grid::{NEIGHBOR_COUNT, is_coord_neighborhood_safe};
+use crate::core::kernel::{cell_from_position, populate_transfer_cache};
+use crate::math::Real;
 use bevy::prelude::{IVec2, Vec2};
 
 pub type PackedCell = u64;
@@ -32,6 +33,7 @@ pub struct ParticleSet {
     regions: Vec<(PackedCell, Range<usize>)>,
     active_regions: HashSet<PackedCell>,
     active_cells: Vec<PackedCell>,
+    // Matches Sparkl's 5-wide bins (4 particles + scheduling metadata slot).
     particle_bins: Vec<[usize; 5]>,
     transfer_cache: Vec<ParticleTransferCache>,
 }
@@ -186,10 +188,9 @@ impl ParticleSet {
             .resize(particle_count, ParticleTransferCache::default());
 
         for (idx, particle) in self.particles.iter_mut().enumerate() {
-            let (ix, iy) = grid_coords(particle.position, cell_width);
-            let cell_coord = IVec2::new(ix, iy);
-
+            let cell_coord = cell_from_position(particle.position, cell_width);
             if !is_coord_neighborhood_safe(cell_coord) {
+                // TODO: Stream this particle into neighbouring world chunks once open-world paging exists.
                 particle.failed = true;
                 particle.grid_index = u64::MAX;
                 self.active_cells[idx] = u64::MAX;
@@ -197,17 +198,11 @@ impl ParticleSet {
                 continue;
             }
 
-            let packed = pack_coords(ix, iy);
+            let packed = pack_coords(cell_coord.x, cell_coord.y);
             particle.grid_index = packed;
             self.active_cells[idx] = packed;
 
-            let interp = GridInterpolation::compute_for_particle(particle.position);
-            let cache = &mut self.transfer_cache[idx];
-            for (entry, (coord, weight, distance)) in
-                cache.neighbors.iter_mut().zip(interp.iter_neighbors())
-            {
-                *entry = (coord, weight, distance);
-            }
+            populate_transfer_cache(particle.position, &mut self.transfer_cache[idx]);
         }
 
         self.order
@@ -215,6 +210,7 @@ impl ParticleSet {
 
         let mut current_region: Option<(PackedCell, usize)> = None;
         let mut current_bin = [usize::MAX; 5];
+        // TODO: store region color/scheduling metadata in the final slot to mirror Sparkl's bin colouring.
         let mut bin_len = 0;
 
         for (sorted_idx, &particle_idx) in self.order.iter().enumerate() {
@@ -263,11 +259,4 @@ impl ParticleSet {
         self.active_cells.clear();
         self.particle_bins.clear();
     }
-}
-
-fn grid_coords(position: Vector, cell_width: Real) -> (i32, i32) {
-    let inv = 1.0 / cell_width;
-    let ix = (position.x * inv).round() as i32;
-    let iy = (position.y * inv).round() as i32;
-    (ix, iy)
 }
