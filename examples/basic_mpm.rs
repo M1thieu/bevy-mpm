@@ -11,12 +11,13 @@ use mpm2d::solver::{
     grid_to_particle as solver_grid_to_particle, grid_update,
     particle_to_grid as solver_particle_to_grid,
 };
-use mpm2d::{GRAVITY, MaterialType, Particle, SolverParams};
+use mpm2d::{FluidParams, GRAVITY, MaterialType, Particle, SolverParams};
 use rand::Rng;
 
 const CLUSTER_ORIGINS: [Vec2; 2] = [Vec2::new(16.0, 32.0), Vec2::new(112.0, 32.0)];
 const CLUSTER_WIDTH: u32 = 42;
 const CLUSTER_HEIGHT: u32 = 84;
+const WATER_PARAMS: FluidParams = FluidParams::water();
 
 #[derive(Component)]
 struct ParticleVisual {
@@ -64,7 +65,7 @@ fn init_particles(
     for (cluster_index, origin) in CLUSTER_ORIGINS.iter().enumerate() {
         for x in 0..CLUSTER_WIDTH {
             for y in 0..CLUSTER_HEIGHT {
-                let mut particle = Particle::zeroed(MaterialType::water());
+                let mut particle = Particle::zeroed(MaterialType::fluid(WATER_PARAMS));
                 particle.position = Vec2 {
                     x: origin.x + x as f32 / 4.0,
                     y: origin.y + y as f32 / 4.0,
@@ -130,7 +131,7 @@ fn controls(
             rand.random_range(-40.0..=-10.0),
         );
 
-        let mut particle = Particle::zeroed(MaterialType::water());
+        let mut particle = Particle::zeroed(MaterialType::fluid(WATER_PARAMS));
         particle.position = position;
         particle.velocity = velocity;
         let position = particle.position;

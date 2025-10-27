@@ -7,6 +7,7 @@ use bevy::prelude::*;
 
 use crate::config::SolverParams;
 use crate::core::Particle;
+use crate::materials::families::FluidParams;
 use crate::materials::fluids::water;
 
 /// Shared behaviour that every material must implement.
@@ -17,21 +18,25 @@ pub trait MaterialModel {
 
 #[derive(Component, Debug, Clone)]
 pub enum MaterialType {
-    Water,
+    Fluid(FluidParams),
 }
 
 impl MaterialType {
     pub fn water() -> Self {
-        Self::Water
+        Self::Fluid(FluidParams::water())
+    }
+
+    pub fn fluid(params: FluidParams) -> Self {
+        Self::Fluid(params)
     }
 
     pub fn is_fluid(&self) -> bool {
-        matches!(self, Self::Water)
+        matches!(self, Self::Fluid(_))
     }
 
     pub fn material_name(&self) -> &'static str {
         match self {
-            Self::Water => "water",
+            Self::Fluid(fluid) => fluid.name,
         }
     }
 }
@@ -39,13 +44,13 @@ impl MaterialType {
 impl MaterialModel for MaterialType {
     fn compute_stress(&self, particle: &Particle, density: f32, params: &SolverParams) -> Mat2 {
         match self {
-            MaterialType::Water => water::calculate_stress(particle, density, params),
+            MaterialType::Fluid(fluid) => water::calculate_stress(particle, density, params, fluid),
         }
     }
 
     fn project_deformation(&self, particle: &mut Particle) {
         match self {
-            MaterialType::Water => water::project_deformation(particle),
+            MaterialType::Fluid(_) => water::project_deformation(particle),
         }
     }
 }

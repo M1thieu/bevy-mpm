@@ -11,6 +11,36 @@ use crate::geometry::sp_grid::{PackedCell, SpGrid, pack_from_ivec, unpack_coords
 use crate::math::{Real, Vector, quadratic_bspline_weights, zero_vector};
 
 #[derive(Clone, Debug)]
+pub struct MaterialSlot {
+    pub mass: Real,
+    pub momentum: Vector,
+    pub psi_momentum: Real,
+    pub psi_mass: Real,
+}
+
+impl MaterialSlot {
+    pub fn new() -> Self {
+        Self {
+            mass: 0.0,
+            momentum: zero_vector(),
+            psi_momentum: 0.0,
+            psi_mass: 0.0,
+        }
+    }
+
+    pub fn accumulate(&mut self, mass: Real, momentum: Vector, psi_mass: Real, psi_momentum: Real) {
+        self.mass += mass;
+        self.momentum += momentum;
+        self.psi_mass += psi_mass;
+        self.psi_momentum += psi_momentum;
+    }
+
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct GridNode {
     pub mass: Real,
     pub momentum: Vector,
@@ -20,6 +50,7 @@ pub struct GridNode {
     pub particles: (u32, u32),
     pub active: bool,
     pub boundary: bool,
+    pub fluids: MaterialSlot,
 }
 
 impl Default for GridNode {
@@ -33,6 +64,7 @@ impl Default for GridNode {
             particles: (0, 0),
             active: false,
             boundary: false,
+            fluids: MaterialSlot::new(),
         }
     }
 }

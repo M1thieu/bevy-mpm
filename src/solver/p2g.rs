@@ -35,7 +35,9 @@ pub fn particle_to_grid(time: Res<Time>, mut state: ResMut<MpmState>) {
                 let transfer = &cache[idx];
                 for &(coord, weight, _) in &transfer.neighbors {
                     let cell = grid.get_cell_coord_mut(coord);
-                    cell.mass += weight * particle.mass;
+                    let mass_delta = weight * particle.mass;
+                    cell.mass += mass_delta;
+                    cell.fluids.mass += mass_delta;
                 }
             }
         }
@@ -85,10 +87,17 @@ pub fn particle_to_grid(time: Res<Time>, mut state: ResMut<MpmState>) {
                 for &(coord, weight, cell_distance) in &transfer.neighbors {
                     let cell = grid.get_cell_coord_mut(coord);
                     let contribution = affine * cell_distance + momentum;
-                    cell.momentum += weight * contribution;
+                    let momentum_delta = weight * contribution;
+                    cell.momentum += momentum_delta;
+                    cell.fluids.momentum += momentum_delta;
+
                     if psi_mass > 0.0 {
-                        cell.psi_mass += weight * psi_mass;
-                        cell.psi_momentum += weight * psi_momentum;
+                        let psi_mass_delta = weight * psi_mass;
+                        let psi_momentum_delta = weight * psi_momentum;
+                        cell.psi_mass += psi_mass_delta;
+                        cell.psi_momentum += psi_momentum_delta;
+                        cell.fluids.psi_mass += psi_mass_delta;
+                        cell.fluids.psi_momentum += psi_momentum_delta;
                     }
                 }
             }

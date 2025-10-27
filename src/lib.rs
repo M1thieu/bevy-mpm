@@ -19,7 +19,7 @@ pub mod solver;
 // Clean public API - everything you need to get started
 pub use config::{GRAVITY, REST_DENSITY, SolverParams};
 pub use core::{GRID_RESOLUTION, Grid, GridNode, MpmState, Particle, ParticleRemap};
-pub use materials::MaterialType;
+pub use materials::{FluidParams, MaterialType};
 
 use crate::core::update_particles_health;
 use crate::core::{
