@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a problem in bevy-mpm
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Please provide as much detail as possible so we can reproduce the issue quickly.
+
+  - type: input
+    id: version
+    attributes:
+      label: bevy-mpm version / commit
+      placeholder: e.g. main @ 1a2b3c4
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Bevy version, and anything else that might be relevant.
+      placeholder: Windows 11, Bevy 0.17, Rust 1.81
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: What do we need to do to see the issue?
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      placeholder: Tell us what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      placeholder: Tell us what actually happened (logs, screenshots, etc.).
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional context
+      placeholder: Anything else we should know?
