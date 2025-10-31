@@ -16,89 +16,74 @@ pub fn particle_to_grid(time: Res<Time>, mut state: ResMut<MpmState>) {
     let solver_params = state.solver_params().clone();
     let dt = time.delta_secs();
 
-    let bins_owned = state.particle_bins().to_owned();
     let (grid, particles, cache) = state.grid_mut_and_particles_cache();
-    let bins = &bins_owned;
     let cell_width = grid.cell_width();
     let inv_d = inv_d(cell_width);
-    const COLOUR_COUNT: u8 = 4;
 
     // Pass 1: accumulate mass
-    for colour in 0..COLOUR_COUNT {
-        for bin in bins.iter().filter(|b| b.colour == colour) {
-            for i in 0..bin.len as usize {
-                let idx = bin.indices[i];
-                if idx == usize::MAX {
-                    continue;
-                }
-                let particle = &particles[idx];
-                let transfer = &cache[idx];
-                for &(coord, weight, _) in &transfer.neighbors {
-                    let cell = grid.get_cell_coord_mut(coord);
-                    let mass_delta = weight * particle.mass;
-                    cell.mass += mass_delta;
-                    cell.fluids.mass += mass_delta;
-                }
-            }
+    for (idx, particle) in particles.iter().enumerate() {
+        let transfer = &cache[idx];
+        for &(coord, weight, _) in &transfer.neighbors {
+            let cell = grid.get_cell_coord_mut(coord);
+            let mass_delta = weight * particle.mass;
+            cell.mass += mass_delta;
+            cell.fluids.mass += mass_delta;
         }
     }
 
     // Pass 2: scatter momentum with stress contribution
-    for colour in 0..COLOUR_COUNT {
-        for bin in bins.iter().filter(|b| b.colour == colour) {
-            for i in 0..bin.len as usize {
-                let idx = bin.indices[i];
-                if idx == usize::MAX {
-                    continue;
-                }
-                let particle = &particles[idx];
-                let transfer = &cache[idx];
+    // OPTIMIZATION: Batch neighbor cell lookups to avoid double HashMap access
+    for (idx, particle) in particles.iter().enumerate() {
+        let transfer = &cache[idx];
 
-                // Density calculation with direct coordinate access
-                let mut density = 0.0;
-                for &(coord, weight, _) in &transfer.neighbors {
-                    if let Some(cell) = grid.get_cell_coord(coord) {
-                        density += cell.mass * weight;
-                    }
-                }
+        // Fetch all 9 neighbor cells ONCE and cache them
+        // This avoids 18 HashMap lookups (9 for density + 9 for momentum scatter)
+        let mut neighbor_cells: [Option<(f32, Vec2)>; 9] = [None; 9];
+        let mut density = 0.0;
 
-                // Calculate stress based on material type
-                let stress =
-                    particle
-                        .material_type
-                        .compute_stress(particle, density, &solver_params);
+        for (i, &(coord, weight, cell_distance)) in transfer.neighbors.iter().enumerate() {
+            if let Some(cell) = grid.get_cell_coord(coord) {
+                density += cell.mass * weight;
+                neighbor_cells[i] = Some((weight, cell_distance));
+            }
+        }
 
-                let psi_mass = if particle.phase > 0.0
-                    && particle.crack_propagation_factor != 0.0
-                    && !particle.failed
-                {
-                    particle.mass
-                } else {
-                    0.0
-                };
-                let psi_momentum = psi_mass * particle.psi_pos;
+        // Calculate stress based on material type
+        let stress = particle.material_type.compute_stress(particle, density, &solver_params);
 
-                // Affine term (APIC) incorporating stress (Jiang et al. 2015)
-                // CRITICAL: Use volume0 (rest volume) not current volume
-                let affine = particle.mass * particle.velocity_gradient
-                    - (particle.volume0 * inv_d * dt) * stress;
-                let momentum = particle.mass * particle.velocity;
+        let psi_mass = if particle.phase > 0.0
+            && particle.crack_propagation_factor != 0.0
+            && !particle.failed
+        {
+            particle.mass
+        } else {
+            0.0
+        };
+        let psi_momentum = psi_mass * particle.psi_pos;
 
-                for &(coord, weight, cell_distance) in &transfer.neighbors {
-                    let cell = grid.get_cell_coord_mut(coord);
-                    let contribution = affine * cell_distance + momentum;
-                    let momentum_delta = weight * contribution;
-                    cell.momentum += momentum_delta;
-                    cell.fluids.momentum += momentum_delta;
+        // Affine term (APIC) incorporating stress (Jiang et al. 2015)
+        // CRITICAL: Use volume0 (rest volume) not current volume
+        let affine = particle.mass * particle.velocity_gradient
+            - (particle.volume0 * inv_d * dt) * stress;
+        let momentum = particle.mass * particle.velocity;
 
-                    if psi_mass > 0.0 {
-                        let psi_mass_delta = weight * psi_mass;
-                        let psi_momentum_delta = weight * psi_momentum;
-                        cell.psi_mass += psi_mass_delta;
-                        cell.psi_momentum += psi_momentum_delta;
-                        cell.fluids.psi_mass += psi_mass_delta;
-                        cell.fluids.psi_momentum += psi_momentum_delta;
-                    }
+        // Now scatter momentum using the SAME neighbor iteration
+        // We only do ONE HashMap lookup per neighbor instead of two
+        for (i, &(coord, _weight, _cell_distance)) in transfer.neighbors.iter().enumerate() {
+            if let Some((weight, cell_distance)) = neighbor_cells[i] {
+                let cell = grid.get_cell_coord_mut(coord);
+                let contribution = affine * cell_distance + momentum;
+                let momentum_delta = weight * contribution;
+                cell.momentum += momentum_delta;
+                cell.fluids.momentum += momentum_delta;
+
+                if psi_mass > 0.0 {
+                    let psi_mass_delta = weight * psi_mass;
+                    let psi_momentum_delta = weight * psi_momentum;
+                    cell.psi_mass += psi_mass_delta;
+                    cell.psi_momentum += psi_momentum_delta;
+                    cell.fluids.psi_mass += psi_mass_delta;
+                    cell.fluids.psi_momentum += psi_momentum_delta;
                 }
             }
         }

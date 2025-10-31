@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 use bevy::prelude::IVec2;
 
@@ -44,14 +44,14 @@ pub fn unpack_to_ivec(id: PackedCell) -> IVec2 {
 #[derive(Clone)]
 pub struct SpGrid<T> {
     cell_width: Real,
-    cells: HashMap<PackedCell, T>,
+    cells: IndexMap<PackedCell, T>,
 }
 
 impl<T: Default> SpGrid<T> {
     pub fn new(cell_width: Real) -> Self {
         Self {
             cell_width,
-            cells: HashMap::new(),
+            cells: IndexMap::new(),
         }
     }
 

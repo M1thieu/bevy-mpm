@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use indexmap::IndexSet;
 use std::ops::Range;
 
 use crate::core::Particle;
@@ -58,7 +58,7 @@ pub struct ParticleSet {
     particles: Vec<Particle>,
     order: Vec<usize>,
     regions: Vec<(PackedCell, Range<usize>)>,
-    active_regions: HashSet<PackedCell>,
+    active_regions: IndexSet<PackedCell>,
     active_cells: Vec<PackedCell>,
     particle_bins: Vec<ParticleBin>,
     transfer_cache: Vec<ParticleTransferCache>,
@@ -74,7 +74,7 @@ impl ParticleSet {
             particles: Vec::new(),
             order: Vec::new(),
             regions: Vec::new(),
-            active_regions: HashSet::new(),
+            active_regions: IndexSet::new(),
             active_cells: Vec::new(),
             particle_bins: Vec::new(),
             transfer_cache: Vec::new(),
@@ -133,7 +133,7 @@ impl ParticleSet {
         &self.regions
     }
 
-    pub fn active_region_ids(&self) -> &HashSet<PackedCell> {
+    pub fn active_region_ids(&self) -> &IndexSet<PackedCell> {
         &self.active_regions
     }
 
@@ -231,6 +231,7 @@ impl ParticleSet {
             populate_transfer_cache(particle.position, &mut self.transfer_cache[idx]);
         }
 
+        // Simple sort (will be parallel with rayon later)
         self.order
             .sort_by_key(|&idx| self.particles[idx].grid_index);
 
