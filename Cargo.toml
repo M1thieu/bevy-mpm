@@ -25,3 +25,7 @@ codegen-units = 1
 [[bench]]
 name = "memory_benchmark"
 harness = false
+
+[[bench]]
+name = "simple_benchmarks"
+harness = false
