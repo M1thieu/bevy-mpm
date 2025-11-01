@@ -19,7 +19,8 @@ pub fn pressure(stress: Matrix) -> Real {
 /// How much stress is being applied overall.
 #[inline]
 pub fn stress_magnitude(stress: Matrix) -> Real {
-    (stress.x_axis.length_squared() + stress.y_axis.length_squared()).sqrt()
+    // Frobenius norm: sqrt(sum of all elements squared)
+    stress.norm()
 }
 
 /// Physics parameter conversions - universal MPM utilities.
@@ -70,7 +71,7 @@ pub mod physics {
     #[inline]
     pub fn deviatoric_part(tensor: &Matrix) -> Matrix {
         let spherical = spherical_part(tensor);
-        *tensor - Matrix::from_diagonal(math::repeat_vector(spherical))
+        *tensor - Matrix::from_diagonal(&math::repeat_vector(spherical))
     }
 
     /// Extracts spherical part of tensor (mean of diagonal).

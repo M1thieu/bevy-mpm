@@ -259,8 +259,8 @@ impl Particle {
             self.failed = true;
         }
 
-        if !self.position.is_finite()
-            || !self.velocity.is_finite()
+        if !self.position.x.is_finite() || !self.position.y.is_finite()
+            || !self.velocity.x.is_finite() || !self.velocity.y.is_finite()
             || !self.mass.is_finite()
             || self.mass <= 0.0
         {
@@ -274,7 +274,7 @@ impl Particle {
 }
 
 fn matrix_is_finite(m: &Matrix) -> bool {
-    m.x_axis.is_finite() && m.y_axis.is_finite()
+    m[(0,0)].is_finite() && m[(0,1)].is_finite() && m[(1,0)].is_finite() && m[(1,1)].is_finite()
 }
 
 pub fn update_particles_health(particles: &mut [Particle]) {

@@ -6,7 +6,8 @@
       "Bash(cargo run:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []

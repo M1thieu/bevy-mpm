@@ -7,7 +7,7 @@ use bevy::prelude::*;
 
 use crate::core::{GRID_RESOLUTION, MpmState, kernel::inv_d};
 use crate::materials::MaterialModel;
-use crate::math::outer_product;
+use crate::math::{zero_vector, zero_matrix, identity_matrix, outer_product, from_bevy_vec2};
 
 /// Native coordinate-based G2P transfer (eliminates linear index conversions)
 pub fn grid_to_particle(time: Res<Time>, mut state: ResMut<MpmState>) {
@@ -19,13 +19,14 @@ pub fn grid_to_particle(time: Res<Time>, mut state: ResMut<MpmState>) {
     for (idx, particle) in particles.iter_mut().enumerate() {
         let transfer = &transfer_cache[idx];
 
-        particle.velocity = Vec2::ZERO;
-        let mut velocity_gradient = Mat2::ZERO;
+        particle.velocity = zero_vector();
+        let mut velocity_gradient = zero_matrix();
 
         for &(coord, weight, cell_distance) in &transfer.neighbors {
             if let Some(cell) = grid.get_cell_coord(coord) {
-                let weighted_velocity = cell.velocity * weight;
-                let outer = outer_product(weighted_velocity, cell_distance);
+                let weighted_velocity = cell.velocity * weight;  // nalgebra Vector
+                let cell_dist_na = from_bevy_vec2(cell_distance);
+                let outer = outer_product(weighted_velocity, cell_dist_na);
 
                 particle.velocity += weighted_velocity;
                 velocity_gradient += outer * (weight * inv_d);
@@ -37,7 +38,7 @@ pub fn grid_to_particle(time: Res<Time>, mut state: ResMut<MpmState>) {
 
         // Update deformation gradient: F_new = (I + dt * C) * F_old
         let dt = time.delta_secs();
-        let deformation_update = Mat2::IDENTITY + velocity_gradient * dt;
+        let deformation_update = identity_matrix() + velocity_gradient * dt;
         particle.deformation_gradient = deformation_update * particle.deformation_gradient;
 
         let material = particle.material_type.clone();
@@ -48,8 +49,9 @@ pub fn grid_to_particle(time: Res<Time>, mut state: ResMut<MpmState>) {
         particle.position += particle_velocity * time.delta_secs();
 
         // Prevent particles from going out of bounds
-        particle.position = particle
-            .position
-            .clamp(Vec2::splat(1.0), Vec2::splat(GRID_RESOLUTION as f32 - 2.0));
+        let min = 1.0;
+        let max = GRID_RESOLUTION as f32 - 2.0;
+        particle.position.x = particle.position.x.clamp(min, max);
+        particle.position.y = particle.position.y.clamp(min, max);
     }
 }

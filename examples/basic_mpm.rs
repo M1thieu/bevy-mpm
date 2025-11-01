@@ -12,6 +12,8 @@ use mpm2d::solver::{
     particle_to_grid as solver_particle_to_grid,
 };
 use mpm2d::{FluidParams, GRAVITY, MaterialType, Particle, SolverParams};
+use mpm2d::math::{to_bevy_vec2, from_bevy_vec2};
+use nalgebra::Vector2;
 use rand::Rng;
 
 const CLUSTER_ORIGINS: [Vec2; 2] = [Vec2::new(16.0, 32.0), Vec2::new(112.0, 32.0)];
@@ -66,14 +68,14 @@ fn init_particles(
         for x in 0..CLUSTER_WIDTH {
             for y in 0..CLUSTER_HEIGHT {
                 let mut particle = Particle::zeroed(MaterialType::fluid(WATER_PARAMS));
-                particle.position = Vec2 {
-                    x: origin.x + x as f32 / 4.0,
-                    y: origin.y + y as f32 / 4.0,
-                };
+                particle.position = Vector2::new(
+                    origin.x + x as f32 / 4.0,
+                    origin.y + y as f32 / 4.0,
+                );
                 particle.velocity =
-                    Vec2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0));
+                    Vector2::new(rand.random_range(-1.0..=1.0), rand.random_range(-1.0..=1.0));
 
-                let position = particle.position;
+                let position = to_bevy_vec2(&particle.position);
                 let index = state.add_particle(particle);
                 spawn_particle_entity(
                     &mut commands,
@@ -122,11 +124,11 @@ fn controls(
 
     if mouse.pressed(MouseButton::Left) {
         let mut rand = rand::rng();
-        let position = Vec2 {
-            x: 64.0 + rand.random_range(-2.0..=2.0),
-            y: 64.0 + rand.random_range(-2.0..=2.0),
-        };
-        let velocity = Vec2::new(
+        let position = Vector2::new(
+            64.0 + rand.random_range(-2.0..=2.0),
+            64.0 + rand.random_range(-2.0..=2.0),
+        );
+        let velocity = Vector2::new(
             rand.random_range(-12.0..=12.0),
             rand.random_range(-40.0..=-10.0),
         );
@@ -134,7 +136,7 @@ fn controls(
         let mut particle = Particle::zeroed(MaterialType::fluid(WATER_PARAMS));
         particle.position = position;
         particle.velocity = velocity;
-        let position = particle.position;
+        let position = to_bevy_vec2(&particle.position);
         let index = state.add_particle(particle);
 
         spawn_particle_entity(
@@ -165,7 +167,7 @@ fn update_particle_transforms(
     let particles = state.particles();
     for (visual, mut transform) in query.iter_mut() {
         if let Some(particle) = particles.get(visual.index) {
-            transform.translation = sim_to_world(particle.position);
+            transform.translation = sim_to_world(to_bevy_vec2(&particle.position));
         }
     }
 }
@@ -219,7 +221,7 @@ fn log_particle_debug(state: Res<MpmState>, timings: Res<ExampleTimings>, mut fr
                 }
             }
 
-            let speed = particle.velocity.length();
+            let speed = particle.velocity.norm();
             let jacobian = particle.deformation_gradient.determinant();
             let volume = particle.mass * if density > 0.0 { 1.0 / density } else { 0.0 };
 
@@ -280,16 +282,16 @@ fn apply_cursor_force(
         return;
     };
 
-    let sim_pos = world_to_sim(world_pos);
+    let sim_pos = from_bevy_vec2(world_to_sim(world_pos));
     let radius = 12.0;
     let strength = 180.0;
     let dt = time.delta_secs();
 
-    let normal = Vec2::Y;
+    let normal = Vector2::new(0.0, 1.0);
     let particles = state.particles_mut();
     for particle in particles.iter_mut() {
         let offset = particle.position - sim_pos;
-        let distance = offset.length();
+        let distance = offset.norm();
         if distance < radius {
             let direction = if distance > 1.0e-4 {
                 offset / distance

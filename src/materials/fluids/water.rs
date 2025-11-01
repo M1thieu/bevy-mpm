@@ -46,7 +46,7 @@ pub fn calculate_stress(
     let strain_rate =
         (particle.velocity_gradient + math::matrix_transpose(&particle.velocity_gradient)) * 0.5;
     let trace = math::matrix_trace(&strain_rate);
-    let deviatoric_strain = strain_rate - Matrix::from_diagonal(math::repeat_vector(trace * 0.5));
+    let deviatoric_strain = strain_rate - Matrix::from_diagonal(&math::repeat_vector(trace * 0.5));
     let viscosity_term = 2.0 * params.dynamic_viscosity * jacobian * deviatoric_strain;
 
     stress + viscosity_term

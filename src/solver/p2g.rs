@@ -8,6 +8,7 @@ use bevy::prelude::*;
 use crate::core::{MpmState, kernel::inv_d};
 use crate::materials::MaterialModel;
 use crate::materials::utils;
+use crate::math::from_bevy_vec2;
 
 /// Two-pass P2G: accumulate mass/momentum, then apply stress forces
 /// Identical behavior to the previous split functions, just consolidated
@@ -72,8 +73,9 @@ pub fn particle_to_grid(time: Res<Time>, mut state: ResMut<MpmState>) {
         for (i, &(coord, _weight, _cell_distance)) in transfer.neighbors.iter().enumerate() {
             if let Some((weight, cell_distance)) = neighbor_cells[i] {
                 let cell = grid.get_cell_coord_mut(coord);
-                let contribution = affine * cell_distance + momentum;
-                let momentum_delta = weight * contribution;
+                let cell_dist_na = from_bevy_vec2(cell_distance);
+                let contribution_na = affine * cell_dist_na + momentum;  // momentum is already nalgebra Vector
+                let momentum_delta = weight * contribution_na;  // keep as nalgebra
                 cell.momentum += momentum_delta;
                 cell.fluids.momentum += momentum_delta;
 

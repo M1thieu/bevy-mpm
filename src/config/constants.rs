@@ -1,8 +1,8 @@
 // Physical constants for MPM simulation
-use bevy::prelude::*;
+use crate::math::Vector;
 
 // Global physics
-pub const GRAVITY: Vec2 = Vec2::new(0.0, -80.0);
+pub const GRAVITY: Vector = Vector::new(0.0, -80.0);
 
 // Fluid material constants
 pub const REST_DENSITY: f32 = 2.0;

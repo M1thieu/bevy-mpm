@@ -200,11 +200,12 @@ pub struct GridInterpolation {
 
 impl GridInterpolation {
     #[inline(always)]
-    pub fn compute_for_particle(position: Vec2) -> Self {
+    pub fn compute_for_particle(position: crate::math::Vector) -> Self {
+        let pos_bevy = crate::math::to_bevy_vec2(&position);
         let base_cell = IVec2::new(position.x.floor() as i32 - 1, position.y.floor() as i32 - 1);
 
         let center_cell = base_cell + IVec2::ONE;
-        let cell_difference = position - center_cell.as_vec2() - 0.5;
+        let cell_difference = pos_bevy - center_cell.as_vec2() - 0.5;
 
         let x_weights = quadratic_bspline_weights(cell_difference.x);
         let y_weights = quadratic_bspline_weights(cell_difference.y);
@@ -223,7 +224,7 @@ impl GridInterpolation {
                 let idx = gy * 3 + gx;
                 let coord = base_cell + IVec2::new(gx as i32, gy as i32);
                 neighbor_coords[idx] = coord;
-                cell_distances[idx] = (coord.as_vec2() - position) + 0.5;
+                cell_distances[idx] = (coord.as_vec2() - pos_bevy) + 0.5;
             }
         }
 
@@ -261,7 +262,7 @@ impl GridInterpolation {
 
 #[inline(always)]
 pub fn calculate_grid_interpolation(particle_position: Vec2) -> GridInterpolation {
-    GridInterpolation::compute_for_particle(particle_position)
+    GridInterpolation::compute_for_particle(crate::math::from_bevy_vec2(particle_position))
 }
 
 #[inline(always)]

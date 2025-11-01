@@ -1,35 +1,35 @@
-use bevy::math::{Mat2, Vec2};
+use nalgebra::{Matrix2, Vector2};
 
 pub type Real = f32;
 pub const DIM: usize = 2;
 
-pub type Vector = Vec2;
-pub type Matrix = Mat2;
-pub type Point = Vec2;
+pub type Vector = Vector2<Real>;
+pub type Matrix = Matrix2<Real>;
+pub type Point = Vector2<Real>;
 
 #[inline(always)]
 pub fn zero_vector() -> Vector {
-    Vec2::ZERO
+    Vector::zeros()
 }
 
 #[inline(always)]
 pub fn repeat_vector(value: Real) -> Vector {
-    Vec2::splat(value)
+    Vector::new(value, value)
 }
 
 #[inline(always)]
 pub fn zero_matrix() -> Matrix {
-    Mat2::ZERO
+    Matrix::zeros()
 }
 
 #[inline(always)]
 pub fn identity_matrix() -> Matrix {
-    Mat2::IDENTITY
+    Matrix::identity()
 }
 
 #[inline(always)]
 pub fn matrix_trace(m: &Matrix) -> Real {
-    m.x_axis.x + m.y_axis.y
+    m.trace()
 }
 
 #[inline(always)]
@@ -44,20 +44,17 @@ pub fn matrix_determinant(m: &Matrix) -> Real {
 
 #[inline(always)]
 pub fn diagonal_from_value(value: Real) -> Matrix {
-    Matrix::from_diagonal(Vec2::splat(value))
+    Matrix::from_diagonal(&Vector::new(value, value))
 }
 
 #[inline(always)]
 pub fn diagonal_from_vec(vec: Vector) -> Matrix {
-    Matrix::from_diagonal(vec)
+    Matrix::from_diagonal(&vec)
 }
 
 #[inline(always)]
 pub fn outer_product(a: Vector, b: Vector) -> Matrix {
-    Matrix::from_cols(
-        Vec2::new(a.x * b.x, a.y * b.x),
-        Vec2::new(a.x * b.y, a.y * b.y),
-    )
+    a * b.transpose()
 }
 
 #[inline(always)]
@@ -81,8 +78,8 @@ impl DecomposedTensor {
     pub fn decompose(tensor: &Matrix) -> Self {
         let spherical_part = matrix_trace(tensor) / (DIM as Real);
         let mut deviatoric_part = *tensor;
-        deviatoric_part.x_axis.x -= spherical_part;
-        deviatoric_part.y_axis.y -= spherical_part;
+        deviatoric_part[(0, 0)] -= spherical_part;
+        deviatoric_part[(1, 1)] -= spherical_part;
         Self {
             deviatoric_part,
             spherical_part,
@@ -98,8 +95,29 @@ impl DecomposedTensor {
 
     pub fn recompose(&self) -> Matrix {
         let mut result = self.deviatoric_part;
-        result.x_axis.x += self.spherical_part;
-        result.y_axis.y += self.spherical_part;
+        result[(0, 0)] += self.spherical_part;
+        result[(1, 1)] += self.spherical_part;
         result
     }
+}
+
+// === Bevy Conversion Helpers ===
+// Convert nalgebra types to Bevy types for rendering
+
+#[inline(always)]
+pub fn to_bevy_vec2(v: &Vector) -> bevy::prelude::Vec2 {
+    bevy::prelude::Vec2::new(v.x, v.y)
+}
+
+#[inline(always)]
+pub fn from_bevy_vec2(v: bevy::prelude::Vec2) -> Vector {
+    Vector::new(v.x, v.y)
+}
+
+#[inline(always)]
+pub fn to_bevy_mat2(m: &Matrix) -> bevy::prelude::Mat2 {
+    bevy::prelude::Mat2::from_cols_array(&[
+        m[(0, 0)], m[(1, 0)],
+        m[(0, 1)], m[(1, 1)],
+    ])
 }
